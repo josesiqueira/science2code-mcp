@@ -1,0 +1,72 @@
+# Working notes assessing other projects in this space. Kept out of the
+# repository: a comparative judgement belongs in a piece of writing that makes
+# its argument, dated and attributable, not in a scratch directory that ships
+# with a tool. The positioning that IS settled is in docs/DESIGN_RATIONALE.md.
+related_tools/
+
+# Corpus. Papers are paywalled or licence-limited and never belong in git.
+corpus/
+*.pdf
+**/*.pdf
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Test and type-check artifacts
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.mypy_cache/
+.pyright/
+.tox/
+.nox/
+.hypothesis/
+
+# Extracted text sidecars sit beside their PDF and are regenerated whenever
+# the extractor or the normaliser changes. Derived, never source.
+corpus/**/*.txt
+
+# Local environment pinning and shells
+.python-version
+.envrc
+.direnv/
+
+# Editor and OS leftovers
+*.swp
+*~
+Thumbs.db
+
+# Built documentation
+docs/_build/
+site/
+
+# Build artifacts
+*.egg-info/
+
+# Private design-decision record: kept on disk for a future write-up,
+# never part of the published tool. See conversation of 2026-09-01.
+docs/DESIGN_RATIONALE.md
+
+# Stray research artifact (GROBID source), never part of the tool.
+tl.java
+
+# Adapter/design reasoning: kept on disk, not part of the published tool.
+docs/ADAPTERS.md

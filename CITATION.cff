@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+title: science2code-mcp
+message: >-
+  If you use this software, please cite it using the metadata from this file.
+type: software
+authors:
+  - given-names: Jose
+    family-names: Siqueira de Cerqueira
+    email: jose.siqueiradecerqueira@tuni.fi
+    affiliation: Tampere University
+abstract: >-
+  A local Model Context Protocol server that grounds coding agents in
+  scientific papers. It verifies an agent's quote against the user's own held
+  PDFs and returns either the paper's own characters with a locator, or a typed
+  refusal naming which kind of refusal it is, with no language model in the
+  loop. It never asserts whose claim a sentence carries.
+keywords:
+  - model-context-protocol
+  - quote-verification
+  - scientific-literature
+  - grounding
+  - citation
+license: AGPL-3.0-or-later
+version: 0.1.0
+# A DOI is minted at the first public release, through Zenodo, and added here.
+# Until then this file gives a citable record of authorship and license.

@@ -1,0 +1,111 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "science2code"
+version = "0.1.0"
+description = "Ground code development in scientific papers: verbatim passages with locators, or an explicit refusal."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+keywords = [
+    "citation",
+    "provenance",
+    "quote-anchoring",
+    "mcp",
+    "web-annotation",
+    "research-tooling",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Text Processing :: Linguistic",
+    "Typing :: Typed",
+]
+
+# ZERO required runtime dependencies, and that is a feature rather than an
+# oversight. A stored anchor is only as durable as the code that can still read
+# it, so `science2code.normalise` and `science2code.anchor` are stdlib only and
+# import on a bare Python with nothing installed. Anything that needs a wheel
+# goes in an extra below. Do not promote one into this list.
+dependencies = []
+
+[project.optional-dependencies]
+# The MCP server. Only the server module needs this.
+#
+# The floor is 2.10 and it was measured rather than guessed, by installing each
+# release and calling build_server() against it. `>=2.0` was wrong: on fastmcp
+# 2.0.0 through 2.2.6 the whole MCP layer fails to start with
+# `TypeError: FastMCP.tool() got an unexpected keyword argument 'annotations'`,
+# because the tool decorator grew `annotations` in 2.2.7. The two later
+# constructor arguments build_server() passes moved the floor the rest of the
+# way: `mask_error_details` landed in 2.5.0 and `version` in 2.10.0. Both are
+# load bearing. Without the first, an unhandled exception's own message reaches
+# the client, and an OSError's message carries an absolute local path. Without
+# the second, the MCP handshake reports fastmcp's version as this server's.
+# Verified against the newest release, fastmcp 4.0.0, on 2026-09-01:
+# build_server() builds and the whole suite, protocol tests included, passes.
+# The floor stays at the measured minimum so 2.x and 3.x callers still work,
+# while a fresh install pulls the newest by default.
+mcp = ["fastmcp>=2.10"]
+# An alternative scorer. `scorer="rapidfuzz"` raises a clear ValueError when it
+# is absent, and the default scorer is stdlib difflib, so this is never needed.
+# Note that the two scorers are NOT on the same scale: their paraphrase means
+# differ by about 0.07, which is why every result records which one produced it.
+fast = ["rapidfuzz>=3.0"]
+# The read-only Zotero corpus builder (science2code-zotero). It talks to
+# Zotero's built-in local API over stdlib HTTP and needs NO third-party
+# package, so this extra is intentionally empty: it exists to name the feature
+# and to leave room for an optional pyzotero-backed transport later. Installing
+# or not installing it changes nothing about the core.
+zotero = []
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+science2code = "science2code.cli:main"
+# Optional, read-only Zotero corpus builder. Stdlib only, so it needs no extra
+# packages; it is a separate script rather than a science2code subcommand so
+# the core CLI stays untouched and Zotero-unaware. It only ever runs when you
+# invoke it, and it only reads Zotero. See the `zotero` extra below.
+science2code-zotero = "science2code.connectors.zotero:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+# 100, not 88. The code is written at 100 and CI runs this file, so a floor
+# nobody meets would be a gate that is red on every commit rather than a
+# standard. Raise it only with a reason; lowering it is a large diff.
+line-length = 100
+src = ["src", "tests"]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    # This project formats with .format() and with the percent operator, and
+    # does not convert either to an f-string. The choice is not interesting
+    # and neither rule catches a defect, so they are turned off rather than
+    # left failing. What IS worth fixing, and is not enforceable by a linter:
+    # the modules do not agree with each other. cli, corpus and extract use
+    # .format() throughout; anchor, envelope, normalise and server use the
+    # percent operator throughout. Pick one before the next module is written.
+    "UP031",  # printf-style formatting
+    "UP032",  # .format() where an f-string would do
+]
