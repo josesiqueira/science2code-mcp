@@ -70,3 +70,7 @@ tl.java
 
 # Adapter/design reasoning: kept on disk, not part of the published tool.
 docs/ADAPTERS.md
+
+# Dated, immutable research dumps: private archival evidence, never shipped.
+# Ignored as a DIRECTORY so no filename can leak and none can collide.
+docs/research/
