@@ -30,7 +30,8 @@ version. A reader that finds an anchor whose recorded version differs from
 `NORMALISER_VERSION` must RE-ANCHOR that quote (re-run the search under the
 current normaliser and rewrite the offset), NOT invalidate it. A version
 mismatch is a stale coordinate system, never evidence that the quote is wrong.
-The same contract holds for `MATCHFORM_VERSION` and the T2 relaxed form.
+The same contract holds for `MATCHFORM_VERSION` and the relaxed match form
+(ANCHOR_RELAXED).
 
 Bump the patch digit for a change that cannot move any offset (comments, type
 hints, a faster loop). Bump the minor digit for a change to the fold tables or
@@ -65,7 +66,8 @@ below so the reasoning is inspectable rather than asserted. `stages=` disables
 any individual stage, which is what makes the ablation re-runnable by anyone
 holding a corpus of their own.
 
-S0  Invisible-character strip. Removes U+00AD SOFT HYPHEN, U+200B ZERO WIDTH
+NORMALISER_STAGE_INVISIBLE (value 0)
+    Invisible-character strip. Removes U+00AD SOFT HYPHEN, U+200B ZERO WIDTH
     SPACE, U+200C ZERO WIDTH NON-JOINER, U+200D ZERO WIDTH JOINER, U+2060 WORD
     JOINER, U+FEFF ZERO WIDTH NO-BREAK SPACE and U+180E MONGOLIAN VOWEL
     SEPARATOR. Runs BEFORE NFKC and is not optional. NFKC does not remove
@@ -73,16 +75,18 @@ S0  Invisible-character strip. Removes U+00AD SOFT HYPHEN, U+200B ZERO WIDTH
     untouched. Measured: the corpus holds 2,222 ZERO WIDTH SPACE characters
     across 3 documents, 1,730 of them in a single document, interleaved
     character by character inside URLs. On quotes drawn from those 3 documents
-    and retyped without the zero-width characters, S0 on gives 403/403 exact
-    matches and S0 off gives 0/403. It is the difference between 100% and 0%.
+    and retyped without the zero-width characters, the stage on gives 403/403
+    exact matches and the stage off gives 0/403. It is the difference between
+    100% and 0%.
     Known limit, on the record: U+200C and U+200D are orthographic in some
     scripts, so deleting them can merge sequences a reader would keep apart, a
     Perso-Arabic "mikhaham" written with a ZERO WIDTH NON-JOINER against the
     joined form, or a ZERO WIDTH JOINER emoji sequence against its parts. In
     scientific prose that is vanishingly rare and the URL case above is common,
-    so S0 stays; the tradeoff is stated rather than hidden.
+    so the stage stays; the tradeoff is stated rather than hidden.
 
-S1  NFKC, applied CLUSTER-WISE (one starter plus its trailing combining
+NORMALISER_STAGE_NFKC (value 1)
+    NFKC, applied CLUSTER-WISE (one starter plus its trailing combining
     marks, plus any following character whose own decomposition begins with a
     combining mark) so composition cannot silently shift the index map.
     Cluster-wise output is identical to whole-string
@@ -100,31 +104,36 @@ S1  NFKC, applied CLUSTER-WISE (one starter plus its trailing combining
     for the quote "106 operations", which is a different number by six orders
     of magnitude. `science2code.anchor` now compares the superscript,
     subscript and fraction characters of the quote against those of the
-    document span before T1 or T2 may be returned, and reports a located
-    passage with a character diff instead when they differ. The normaliser is
-    unchanged by that, which is why this version literal has not moved.
+    document span before ANCHOR_EXACT or ANCHOR_RELAXED may be returned, and
+    reports a located passage with a character diff instead when they
+    differ. The normaliser is unchanged by that, which is why this version
+    literal has not moved.
 
-S2  Punctuation fold. Curly and angle quotes to "'" and '"', every dash
+NORMALISER_STAGE_PUNCTUATION (value 2)
+    Punctuation fold. Curly and angle quotes to "'" and '"', every dash
     variant and U+2212 MINUS SIGN to "-", U+2026 to "...", U+2044 to "/",
     U+037E to ";", and U+00A0 / U+2000 to U+200A / U+202F / U+205F / U+3000 to
     a single U+0020. Worth 16.2 points corpus-wide: on quotes retyped with
-    ASCII punctuation, the full pipeline scores 90.1% exact and dropping S2
-    scores 73.9%. On the subset of quotes that actually contain foldable
+    ASCII punctuation, the full pipeline scores 90.1% exact and dropping the
+    stage scores 73.9%. On the subset of quotes that actually contain foldable
     punctuation the gap is 99.9% against 0.6%.
 
-S3  De-hyphenate across a line break. A letter, then "-", then optional
+NORMALISER_STAGE_DEHYPHENATE (value 3)
+    De-hyphenate across a line break. A letter, then "-", then optional
     spaces or tabs, then a SINGLE newline, then optional spaces or tabs, then
     a LOWERCASE letter: the hyphen and the break are deleted. It must not jump
     a blank line, because a blank line means intervening page furniture (a
-    page number, a running head). Worth 20.8 points: 90.1% with S3 against
-    69.3% without. The lowercase condition is measured, not assumed: on 5,294
-    line-break hyphen sites labelled against an independent reading-order
-    rendering of the same PDF, always dropping the hyphen errs on 0.00% and
-    always keeping it errs on 100%, so dropping is right; the residual risk is
-    a real compound split at a line break, which S3 joins wrongly and which
-    the T2 match form below recovers.
+    page number, a running head). Worth 20.8 points: 90.1% with the stage
+    against 69.3% without. The lowercase condition is measured, not assumed:
+    on 5,294 line-break hyphen sites labelled against an independent
+    reading-order rendering of the same PDF, always dropping the hyphen errs
+    on 0.00% and always keeping it errs on 100%, so dropping is right; the
+    residual risk is a real compound split at a line break, which the stage
+    joins wrongly and which the relaxed match form below (ANCHOR_RELAXED)
+    recovers.
 
-S4  Whitespace collapse. Any run of whitespace, form feed and vertical tab
+NORMALISER_STAGE_WHITESPACE (value 4)
+    Whitespace collapse. Any run of whitespace, form feed and vertical tab
     included, becomes a single U+0020, and the ends are stripped. Worth 5.1
     points: 90.1% against 85.0%.
 
@@ -133,7 +142,7 @@ CASE IS PRESERVED. `normalise()` never casefolds. Casefolding belongs only to
 stored as a quote.
 
 
-THE T2 RELAXED MATCH FORM
+THE RELAXED MATCH FORM (ANCHOR_RELAXED)
 -------------------------
 `match_form()` derives a second, more aggressive form from the normalised
 text: it deletes hyphens that sit between two letters, deletes a hyphen that
@@ -144,9 +153,9 @@ to survive damage the EXTRACTOR did, not damage the quote did. pdftotext's own
 reading-order de-hyphenation drops the hyphen of a genuine compound at a line
 break, so the extracted text holds "longterm" where the quote an agent types is
 "long-term". Measured: on 613 such quotes across all 44 documents, exact
-matching recovers 0 and the T2 form recovers 609 (99.3%). Deleting the hyphen
-on BOTH sides cannot be wrong, where a rule that decides whether to keep it
-errs on 1.27% of labelled sites.
+matching recovers 0 and the relaxed match form recovers 609 (99.3%). Deleting
+the hyphen on BOTH sides cannot be wrong, where a rule that decides whether to
+keep it errs on 1.27% of labelled sites.
 
 The match form is for character-identity matching only. Offsets found in it
 are mapped back through `match_form_with_map()` to raw source offsets before
@@ -161,7 +170,7 @@ import hashlib
 import unicodedata
 from collections.abc import Iterable
 
-NORMALISER_VERSION = "norm/1.1.0"
+NORMALISER_VERSION = "norm/1.1.1"
 MATCHFORM_VERSION = "match/1.1.0"
 
 __all__ = [
@@ -172,11 +181,11 @@ __all__ = [
     "fingerprint_source",
     "fingerprint_file",
     "ALL_STAGES",
-    "S0_INVISIBLE",
-    "S1_NFKC",
-    "S2_PUNCTUATION",
-    "S3_DEHYPHENATE",
-    "S4_WHITESPACE",
+    "NORMALISER_STAGE_INVISIBLE",
+    "NORMALISER_STAGE_NFKC",
+    "NORMALISER_STAGE_PUNCTUATION",
+    "NORMALISER_STAGE_DEHYPHENATE",
+    "NORMALISER_STAGE_WHITESPACE",
     "normalise",
     "normalise_text",
     "match_form",
@@ -263,26 +272,31 @@ def fingerprint_file(path: str | None) -> str:
 NORMALISER_FINGERPRINT = fingerprint_file(globals().get("__file__"))
 
 
-S0_INVISIBLE = 0
-S1_NFKC = 1
-S2_PUNCTUATION = 2
-S3_DEHYPHENATE = 3
-S4_WHITESPACE = 4
+NORMALISER_STAGE_INVISIBLE = 0
+NORMALISER_STAGE_NFKC = 1
+NORMALISER_STAGE_PUNCTUATION = 2
+NORMALISER_STAGE_DEHYPHENATE = 3
+NORMALISER_STAGE_WHITESPACE = 4
 
-ALL_STAGES = (S0_INVISIBLE, S1_NFKC, S2_PUNCTUATION, S3_DEHYPHENATE,
-              S4_WHITESPACE)
+ALL_STAGES = (NORMALISER_STAGE_INVISIBLE, NORMALISER_STAGE_NFKC,
+              NORMALISER_STAGE_PUNCTUATION, NORMALISER_STAGE_DEHYPHENATE,
+              NORMALISER_STAGE_WHITESPACE)
 
 _STAGE_NAMES = {
-    S0_INVISIBLE: "S0 invisible-character strip",
-    S1_NFKC: "S1 NFKC",
-    S2_PUNCTUATION: "S2 punctuation fold",
-    S3_DEHYPHENATE: "S3 de-hyphenate across line breaks",
-    S4_WHITESPACE: "S4 whitespace collapse",
+    NORMALISER_STAGE_INVISIBLE:
+        "NORMALISER_STAGE_INVISIBLE invisible-character strip",
+    NORMALISER_STAGE_NFKC: "NORMALISER_STAGE_NFKC compatibility normalisation",
+    NORMALISER_STAGE_PUNCTUATION:
+        "NORMALISER_STAGE_PUNCTUATION punctuation fold",
+    NORMALISER_STAGE_DEHYPHENATE:
+        "NORMALISER_STAGE_DEHYPHENATE de-hyphenate across line breaks",
+    NORMALISER_STAGE_WHITESPACE:
+        "NORMALISER_STAGE_WHITESPACE whitespace collapse",
 }
 
 
 # ---------------------------------------------------------------------------
-# S0 tables
+# NORMALISER_STAGE_INVISIBLE tables
 # ---------------------------------------------------------------------------
 # Characters that carry no glyph and no meaning for a quote, and that NFKC
 # leaves in place. Escapes, not literals, so the source stays greppable.
@@ -298,10 +312,10 @@ INVISIBLE: frozenset[str] = frozenset({
 
 
 # ---------------------------------------------------------------------------
-# S2 tables
+# NORMALISER_STAGE_PUNCTUATION tables
 # ---------------------------------------------------------------------------
 def _build_punct_fold() -> dict[str, str]:
-    """Build the S2 fold table. Called once at import; the result is frozen."""
+    """Build the punctuation fold table. Called once at import; frozen."""
     table: dict[str, str] = {}
 
     single_quotes = (
@@ -367,19 +381,20 @@ def _build_punct_fold() -> dict[str, str]:
 
 PUNCT_FOLD: dict[str, str] = _build_punct_fold()
 
-# Every one of these folds to "-" in S2 and NONE of them is ever a word break
-# at the end of a line. S3 deletes a hyphen that sits at a line break because
-# there a hyphen is usually the extractor's syllable break; an em dash, en
-# dash, figure dash, horizontal bar or minus sign at the end of a line is
-# punctuation BETWEEN two whole words, so deleting it fuses them.
+# Every one of these folds to "-" in NORMALISER_STAGE_PUNCTUATION and NONE of
+# them is ever a word break at the end of a line. NORMALISER_STAGE_DEHYPHENATE
+# deletes a hyphen that sits at a line break because there a hyphen is usually
+# the extractor's syllable break; an em dash, en dash, figure dash, horizontal
+# bar or minus sign at the end of a line is punctuation BETWEEN two whole
+# words, so deleting it fuses them.
 #
 # Measured on a 45-document corpus of real scientific PDFs: 29 sites across 14
 # documents. Before this set existed, "difficult to achieve\u2014\nin which case"
 # normalised to "difficult to achievein which case", a word that is in no
-# paper, and every quote spanning such a site was unreachable at T1 and T2
-# because the characters the quote holds are not in the rendering at all.
-# S3 now deletes the line break and KEEPS the dash, which is what the page
-# shows the reader.
+# paper, and every quote spanning such a site was unreachable at ANCHOR_EXACT
+# and ANCHOR_RELAXED because the characters the quote holds are not in the
+# rendering at all. NORMALISER_STAGE_DEHYPHENATE now deletes the line break and
+# KEEPS the dash, which is what the page shows the reader.
 NOT_A_LINE_BREAK_HYPHEN: frozenset[str] = frozenset({
     "\u2012",  # FIGURE DASH
     "\u2013",  # EN DASH
@@ -392,17 +407,19 @@ NOT_A_LINE_BREAK_HYPHEN: frozenset[str] = frozenset({
 
 # U+2010 HYPHEN, U+2011 NON-BREAKING HYPHEN, U+FE63 SMALL HYPHEN-MINUS and
 # U+FF0D FULLWIDTH HYPHEN-MINUS are deliberately absent: each is a hyphen, so
-# each can be a line-break hyphen and S3 may delete it.
+# each can be a line-break hyphen and NORMALISER_STAGE_DEHYPHENATE may delete
+# it.
 assert all(PUNCT_FOLD.get(ch) == "-" for ch in NOT_A_LINE_BREAK_HYPHEN)
 
 # U+00AD SOFT HYPHEN is deliberately NOT in PUNCT_FOLD. It is an invisible and
-# belongs to S0 alone, so that each stage owns exactly one behaviour and an
-# ablation that switches S0 off measures S0 and nothing else.
+# belongs to NORMALISER_STAGE_INVISIBLE alone, so that each stage owns exactly
+# one behaviour and an ablation that switches that stage off measures that
+# stage and nothing else.
 assert "\u00ad" not in PUNCT_FOLD
 
 
 # ---------------------------------------------------------------------------
-# S3 tables
+# NORMALISER_STAGE_DEHYPHENATE tables
 # ---------------------------------------------------------------------------
 # Horizontal whitespace tolerated between the hyphen and the newline, and
 # between the newline and the continuation. Form feed and vertical tab are
@@ -494,14 +511,15 @@ def normalise(text: str, *, stages: Iterable[int] = ALL_STAGES) -> tuple[str, li
         raise TypeError("normalise() expects str, got %s" % type(text).__name__)
 
     active = _resolve_stages(stages)
-    form = "NFKC" if S1_NFKC in active else "NFC"
+    form = "NFKC" if NORMALISER_STAGE_NFKC in active else "NFC"
 
-    # --- S0 invisible-character strip, whole string, before any composition.
+    # --- NORMALISER_STAGE_INVISIBLE: invisible-character strip, whole string,
+    # before any composition.
     # It runs first so that an invisible sitting between a base letter and its
     # combining mark cannot break the cluster the NFKC pass is about to build.
     chars: list[str]
     idxs: list[int]
-    if S0_INVISIBLE in active:
+    if NORMALISER_STAGE_INVISIBLE in active:
         chars = []
         idxs = []
         for i, ch in enumerate(text):
@@ -512,7 +530,8 @@ def normalise(text: str, *, stages: Iterable[int] = ALL_STAGES) -> tuple[str, li
         chars = list(text)
         idxs = list(range(len(text)))
 
-    # --- S1 normalisation, cluster-wise so the index map survives composition.
+    # --- NORMALISER_STAGE_NFKC: normalisation, cluster-wise so the index map
+    # survives composition.
     out_chars: list[str] = []
     out_idxs: list[int] = []
     n = len(chars)
@@ -534,13 +553,14 @@ def normalise(text: str, *, stages: Iterable[int] = ALL_STAGES) -> tuple[str, li
         i = j
     chars, idxs = out_chars, out_idxs
 
-    # --- S2 punctuation fold.
-    # `was_dash` runs alongside and marks each output character that S2 turned
-    # into "-" from a character that is NOT a hyphen. S3 reads it, because
-    # after the fold the two are the same character and the distinction cannot
-    # be recovered from `chars` alone.
+    # --- NORMALISER_STAGE_PUNCTUATION: punctuation fold.
+    # `was_dash` runs alongside and marks each output character that this
+    # stage turned into "-" from a character that is NOT a hyphen.
+    # NORMALISER_STAGE_DEHYPHENATE reads it, because after the fold the two are
+    # the same character and the distinction cannot be recovered from `chars`
+    # alone.
     was_dash: list[bool] = [False] * len(chars)
-    if S2_PUNCTUATION in active:
+    if NORMALISER_STAGE_PUNCTUATION in active:
         out_chars = []
         out_idxs = []
         out_dash: list[bool] = []
@@ -558,8 +578,9 @@ def normalise(text: str, *, stages: Iterable[int] = ALL_STAGES) -> tuple[str, li
                 )
         chars, idxs, was_dash = out_chars, out_idxs, out_dash
 
-    # --- S3 de-hyphenate across a SINGLE line break.
-    if S3_DEHYPHENATE in active:
+    # --- NORMALISER_STAGE_DEHYPHENATE: de-hyphenate across a SINGLE line
+    # break.
+    if NORMALISER_STAGE_DEHYPHENATE in active:
         out_chars = []
         out_idxs = []
         n = len(chars)
@@ -595,8 +616,8 @@ def normalise(text: str, *, stages: Iterable[int] = ALL_STAGES) -> tuple[str, li
             i += 1
         chars, idxs = out_chars, out_idxs
 
-    # --- S4 whitespace collapse and strip.
-    if S4_WHITESPACE in active:
+    # --- NORMALISER_STAGE_WHITESPACE: whitespace collapse and strip.
+    if NORMALISER_STAGE_WHITESPACE in active:
         out_chars = []
         out_idxs = []
         prev_ws = True  # seeded True so leading whitespace is suppressed
@@ -624,11 +645,11 @@ def normalise_text(text: str, *, stages: Iterable[int] = ALL_STAGES) -> str:
 
 
 # ---------------------------------------------------------------------------
-# T2 relaxed match form
+# The relaxed match form (ANCHOR_RELAXED)
 # ---------------------------------------------------------------------------
 def match_fold(norm_text: str, *, hyphen_fold: bool = True,
                case_fold: bool = True) -> tuple[str, list[int]]:
-    """Apply the T2 fold to text that is ALREADY normalised.
+    """Apply the relaxed fold (ANCHOR_RELAXED) to ALREADY normalised text.
 
     Returns (match_text, index_map) where index_map indexes into `norm_text`.
     Callers that already hold a normalised haystack and its map into the raw
@@ -659,11 +680,11 @@ def match_fold(norm_text: str, *, hyphen_fold: bool = True,
             # viewer, hands over "action- able" where a reading-order
             # extraction holds "actionable". That is the extractor's damage in
             # the caller's copy rather than in this corpus, which is the same
-            # damage T2 exists for, seen from the other side. Deleting both
-            # characters on BOTH sides of the comparison is the same safe
-            # direction as the rule above: it cannot decide wrongly, where a
-            # rule that chose whether to keep the hyphen errs on 1.27% of
-            # labelled sites.
+            # damage ANCHOR_RELAXED exists for, seen from the other side.
+            # Deleting both characters on BOTH sides of the comparison is the
+            # same safe direction as the rule above: it cannot decide wrongly,
+            # where a rule that chose whether to keep the hyphen errs on 1.27%
+            # of labelled sites.
             #
             # Measured on 240 sentences lifted from an INDEPENDENT extraction
             # of 12 corpus PDFs, so that no quote was copied out of the text
@@ -674,8 +695,8 @@ def match_fold(norm_text: str, *, hyphen_fold: bool = True,
             continue
         if case_fold:
             # Per character, so the map stays exact. Casefold can lengthen
-            # (U+00DF becomes "ss"), which the map handles the same way S2
-            # handles an ellipsis.
+            # (U+00DF becomes "ss"), which the map handles the same way
+            # NORMALISER_STAGE_PUNCTUATION handles an ellipsis.
             folded = ch.casefold()
             out_chars.extend(folded)
             out_idxs.extend([i] * len(folded))
@@ -687,7 +708,7 @@ def match_fold(norm_text: str, *, hyphen_fold: bool = True,
 
 
 def match_form(text: str) -> str:
-    """The T2 relaxed comparison form.
+    """The relaxed comparison form (ANCHOR_RELAXED).
 
     `normalise()`, then delete intra-word hyphens and casefold. Used only for
     character-identity matching. It is never displayed and never stored as a
@@ -701,9 +722,9 @@ def match_form_with_map(text: str) -> tuple[str, list[int]]:
     """`match_form()` plus an index map back into the ORIGINAL `text`.
 
     index_map[k] is the offset in `text` of the character that produced match
-    character k, composed through both the normaliser and the T2 fold. Same
-    invariants as `normalise()`: length matches, monotone non-decreasing, every
-    entry a valid index into `text`.
+    character k, composed through both the normaliser and the relaxed fold
+    (ANCHOR_RELAXED). Same invariants as `normalise()`: length matches,
+    monotone non-decreasing, every entry a valid index into `text`.
     """
     norm, norm_map = normalise(text)
     match, match_map = match_fold(norm)

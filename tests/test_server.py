@@ -311,23 +311,23 @@ class TestThisServerNeverWritesAFile(unittest.TestCase):
 class TestTierMapping(ServerTestCase):
     QUOTE = "Regulatory sandboxes are established under Article 57"
 
-    def test_t1_becomes_verbatim_exact(self):
-        self.pin_tier(Tier.T1_EXACT, offset=0, length=52, score=1.0)
+    def test_anchor_exact_becomes_verbatim_exact(self):
+        self.pin_tier(Tier.ANCHOR_EXACT, offset=0, length=52, score=1.0)
         result = server.verify_quote(self.QUOTE, paper_id="paper-a")
         self.assertEqual("VERBATIM_EXACT", result["outcome"])
 
-    def test_t2_becomes_relaxed_extractor_damage(self):
-        self.pin_tier(Tier.T2_RELAXED, offset=0, length=52, score=1.0)
+    def test_anchor_relaxed_becomes_relaxed_extractor_damage(self):
+        self.pin_tier(Tier.ANCHOR_RELAXED, offset=0, length=52, score=1.0)
         result = server.verify_quote(self.QUOTE, paper_id="paper-a")
         self.assertEqual("VERBATIM_RELAXED_EXTRACTOR_DAMAGE", result["outcome"])
 
-    def test_t3_becomes_relocated_and_never_verbatim(self):
-        self.pin_tier(Tier.T3_LOCATED, offset=0, length=52, score=0.83, diff="a diff")
+    def test_anchor_located_becomes_relocated_and_never_verbatim(self):
+        self.pin_tier(Tier.ANCHOR_LOCATED, offset=0, length=52, score=0.83, diff="a diff")
         result = server.verify_quote(self.QUOTE, paper_id="paper-a")
         self.assertEqual("PASSAGE_RELOCATED_QUOTE_DIFFERS", result["outcome"])
 
-    def test_t4_becomes_not_locatable(self):
-        self.pin_tier(Tier.T4_NOT_LOCATABLE, offset=None, length=None, score=0.21)
+    def test_anchor_not_locatable_becomes_not_locatable(self):
+        self.pin_tier(Tier.ANCHOR_NOT_LOCATABLE, offset=None, length=None, score=0.21)
         result = server.verify_quote(self.QUOTE, paper_id="paper-a")
         self.assertEqual("NOT_LOCATABLE", result["outcome"])
         self.assertIsNone(result["char_interval"])
@@ -345,7 +345,7 @@ class TestTierMapping(ServerTestCase):
     def test_an_unresolvable_interval_refuses_rather_than_reporting_without_words(self):
         # An outcome that asserts character identity but cannot show the
         # characters would be the exact blur this server exists to prevent.
-        self.pin_tier(Tier.T1_EXACT, offset=10_000_000, length=10, score=1.0)
+        self.pin_tier(Tier.ANCHOR_EXACT, offset=10_000_000, length=10, score=1.0)
         result = server.verify_quote(self.QUOTE, paper_id="paper-a")
         self.assertEqual("NOT_LOCATABLE", result["outcome"])
         self.assertNotIn("document_text", result)
@@ -470,7 +470,7 @@ class TestFindPassage(ServerTestCase):
 
     def test_a_paraphrase_returns_nothing_because_this_is_not_a_ranker(self):
         # A fuzzy window would make this a ranking engine over the corpus.
-        self.pin_tier(Tier.T3_LOCATED, offset=0, length=30, score=0.9, diff="a diff")
+        self.pin_tier(Tier.ANCHOR_LOCATED, offset=0, length=30, score=0.9, diff="a diff")
         result = server.find_passage(self.PHRASE)
         self.assertEqual("OK", result["outcome"])
         self.assertEqual(0, result["hit_count"])
@@ -710,7 +710,7 @@ class TestReadableButNothingFound(ServerTestCase):
     def test_it_is_not_locatable_rather_than_source_not_held(self):
         # "nothing matched" and "there was nothing to match against" are
         # different answers and need different actions from the human.
-        self.pin_tier(Tier.T1_EXACT, offset=10_000_000, length=10)
+        self.pin_tier(Tier.ANCHOR_EXACT, offset=10_000_000, length=10)
         result = server.verify_quote("Regulatory sandboxes are established under Article 57")
         self.assertEqual("NOT_LOCATABLE", result["outcome"])
 
@@ -757,9 +757,10 @@ class TestALineBreakHyphenTheCallerKept(ServerTestCase):
     The corpus holds a reading-order extraction, which rejoined a word broken
     across a line: it says "actionable". A caller who ran their own extractor,
     or copied out of a viewer, hands over "action- able" with the break still
-    in it. That is the same extractor damage T2 exists for, seen from the
-    caller's side, and it must return the DOCUMENT's characters rather than
-    the caller's, or the response would show the caller their own text back.
+    in it. That is the same extractor damage ANCHOR_RELAXED exists for, seen
+    from the caller's side, and it must return the DOCUMENT's characters rather
+    than the caller's, or the response would show the caller their own text
+    back.
 
     Measured on 240 sentences lifted from an independent extraction of 12
     corpus PDFs: 31 of them, 12.9%, differed from the document by nothing but

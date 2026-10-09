@@ -12,13 +12,13 @@ The locating ladder has four outcomes. A boolean has two values. So any
 projection of the ladder onto a boolean merges at least two outcomes, and every
 available merge is wrong:
 
-  * Merging T3_LOCATED into `true` lets a paraphrase, or a quote that was
+  * Merging ANCHOR_LOCATED into `true` lets a paraphrase, or a quote that was
     mistyped, be presented downstream as a passage the document contains. That
     is the exact error this server exists to prevent.
-  * Merging T3_LOCATED into `false` tells a caller that a passage which really
-    is in the document is a fabrication, and makes that indistinguishable from
-    "this document has no text layer at all", which needs a different action
-    from the human.
+  * Merging ANCHOR_LOCATED into `false` tells a caller that a passage which
+    really is in the document is a fabrication, and makes that
+    indistinguishable from "this document has no text layer at all", which
+    needs a different action from the human.
 
 There is no third merge, so there is no correct boolean. `validate()` therefore
 rejects a boolean anywhere in a response envelope, not as style but as the

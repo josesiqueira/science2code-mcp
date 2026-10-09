@@ -83,14 +83,14 @@ _SAFE_ID = re.compile(r"[A-Za-z0-9._-]{1,128}\Z")
 MIN_LOCATABLE_CHARS = 12
 #: A verbatim quote is a sentence, a paragraph, at most a long abstract, never
 #: a book. Five thousand characters is past any real quote yet still bounds the
-#: work: T3 relocation scores windows with an O(needle squared) comparison, but
-#: anchor._best_window caps the NUMBER of windows in inverse proportion to
-#: needle-squared, so scoring cost is flat above a needle of about 1,150 and
-#: the ceiling above that point does not change the CPU worst case. It is here
-#: to refuse an absurd argument and bound memory; the scale-independent CPU
-#: bound is the window cap. A legitimate long quote that is actually present is
-#: found by the exact tiers before T3 is ever reached. A refusal here is a
-#: typed outcome, not a crash.
+#: work: ANCHOR_LOCATED relocation scores windows with an O(needle squared)
+#: comparison, but anchor._best_window caps the NUMBER of windows in inverse
+#: proportion to needle-squared, so scoring cost is flat above a needle of
+#: about 1,150 and the ceiling above that point does not change the CPU worst
+#: case. It is here to refuse an absurd argument and bound memory; the
+#: scale-independent CPU bound is the window cap. A legitimate long quote that
+#: is actually present is found by the exact tiers before ANCHOR_LOCATED is
+#: ever reached. A refusal here is a typed outcome, not a crash.
 MAX_LOCATABLE_CHARS = 5000
 
 #: Environment variable naming the corpus root. Resolved per call, so nothing
@@ -103,17 +103,17 @@ MAX_HITS_LIMIT = 50
 # Tier names rather than Tier members, so a rename in the ladder fails loudly
 # at the boundary instead of silently falling through to a default.
 _TIER_TO_OUTCOME: dict[str, Outcome] = {
-    "T1_EXACT": Outcome.VERBATIM_EXACT,
-    "T2_RELAXED": Outcome.VERBATIM_RELAXED_EXTRACTOR_DAMAGE,
-    "T3_LOCATED": Outcome.PASSAGE_RELOCATED_QUOTE_DIFFERS,
-    "T4_NOT_LOCATABLE": Outcome.NOT_LOCATABLE,
+    "ANCHOR_EXACT": Outcome.VERBATIM_EXACT,
+    "ANCHOR_RELAXED": Outcome.VERBATIM_RELAXED_EXTRACTOR_DAMAGE,
+    "ANCHOR_LOCATED": Outcome.PASSAGE_RELOCATED_QUOTE_DIFFERS,
+    "ANCHOR_NOT_LOCATABLE": Outcome.NOT_LOCATABLE,
 }
 
 _TIER_RANK: dict[str, int] = {
-    "T1_EXACT": 0,
-    "T2_RELAXED": 1,
-    "T3_LOCATED": 2,
-    "T4_NOT_LOCATABLE": 3,
+    "ANCHOR_EXACT": 0,
+    "ANCHOR_RELAXED": 1,
+    "ANCHOR_LOCATED": 2,
+    "ANCHOR_NOT_LOCATABLE": 3,
 }
 
 

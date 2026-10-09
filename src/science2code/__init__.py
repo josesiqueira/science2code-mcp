@@ -12,17 +12,18 @@ can still read it, so the code that reads it must import on a bare Python.
                 stores a result.
 
 The one thing worth knowing before calling anything here: `locate()` returns a
-`Tier`, never a boolean. `Tier.T1_EXACT` and `Tier.T2_RELAXED` are the only
-two that assert "verbatim". `Tier.T3_LOCATED` means the passage was found and
-the quoted text DIFFERS from it, which is not a pass. `Tier.T4_NOT_LOCATABLE`
-is a third outcome, neither success nor invalidation.
+`Tier`, never a boolean. `Tier.ANCHOR_EXACT` and `Tier.ANCHOR_RELAXED` are the
+only two that assert "verbatim". `Tier.ANCHOR_LOCATED` means the passage was
+found and the quoted text DIFFERS from it, which is not a pass.
+`Tier.ANCHOR_NOT_LOCATABLE` is a third outcome, neither success nor
+invalidation.
 
     from science2code import locate, Tier
 
     anchor = locate(document_text, quoted_passage)
     if anchor.is_verbatim:
         ...        # the quote occurs in the document, character for character
-    elif anchor.tier is Tier.T3_LOCATED:
+    elif anchor.tier is Tier.ANCHOR_LOCATED:
         ...        # the passage is at anchor.offset_norm; anchor.diff says how
                    # the quote differs from it. Do not call this verbatim.
     else:

@@ -2,22 +2,23 @@
 
 Four tiers, in order. Only the first two ever assert "verbatim".
 
-    T1_EXACT          the normalised quote occurs literally in the normalised
-                      document.
-    T2_RELAXED        it occurs literally in the MATCH FORM (intra-word hyphen
-                      deleted, casefolded). Still character identity, still no
-                      threshold.
-    T3_LOCATED        the best fuzzy window scores >= t_locate. The verdict is
-                      NOT "verbatim". It is "passage relocated, quote text
-                      differs", and it always carries a character diff.
-    T4_NOT_LOCATABLE  nothing scores at or above t_locate.
+    ANCHOR_EXACT          the normalised quote occurs literally in the
+                          normalised document.
+    ANCHOR_RELAXED        it occurs literally in the MATCH FORM (intra-word
+                          hyphen deleted, casefolded). Still character
+                          identity, still no threshold.
+    ANCHOR_LOCATED        the best fuzzy window scores >= t_locate. The
+                          verdict is NOT "verbatim". It is "passage
+                          relocated, quote text differs", and it always
+                          carries a character diff.
+    ANCHOR_NOT_LOCATABLE  nothing scores at or above t_locate.
 
 Why the ladder has this shape
 -----------------------------
-T1 and T2 are character-identity tests with NO similarity threshold. Nothing
-that is merely *similar* can reach them. That is what makes the false-positive
-rate for "a paraphrase accepted as a verbatim quote" 0% BY CONSTRUCTION rather
-than by tuning a number that a later corpus could move.
+ANCHOR_EXACT and ANCHOR_RELAXED are character-identity tests with NO
+similarity threshold. Nothing that is merely *similar* can reach them. That is what makes the
+false-positive rate for "a paraphrase accepted as a verbatim quote" 0% BY
+CONSTRUCTION rather than by tuning a number that a later corpus could move.
 
 The measurement behind that choice, on 400 exactly-anchored quotes perturbed
 into roughly 3600 positive and negative cases:
@@ -36,29 +37,30 @@ are the evidence the threshold was chosen on, not because they are
 reproducible. The BEHAVIOUR they justify is pinned by the test suite, which
 uses short inline fixtures and opens no file.
 
-So a fabricated attribution and a damaged true quote ARE separable, and t_locate
-separates them. A synonym paraphrase is NOT separable from a damaged true quote
-by any similarity score: the two distributions overlap. The system therefore
-never tries. A paraphrase can at best reach T3, whose verdict already says the
-quote text differs from the document.
+So a fabricated attribution and a damaged true quote ARE separable, and
+t_locate separates them. A synonym paraphrase is NOT separable from a damaged
+true quote by any similarity score: the two distributions overlap. The system
+therefore never tries. A paraphrase can at best reach ANCHOR_LOCATED, whose
+verdict already says the quote text differs from the document.
 
-One fold is not allowed to reach T1 or T2, and it is worth saying why the
-exception exists at all. The normaliser applies NFKC, which is what makes a
-formula quotable, and NFKC discards position: it folds "10\u2076" to "106" and
-"10\u207b\u00b3" to "10-3". A quote and a document that agree only after that
-fold are not the same string, they are different numbers, and an identity
-verdict over them would be exactly the false attribution this ladder exists to
-refuse. So the superscript, subscript and fraction characters of the quote are
-compared against those of the located document span before either identity tier
-may be returned, and a span that only matched because of the fold comes back as
-T3_LOCATED with a character diff over the RAW forms. That check can only ever
-demote, never promote, so it cannot open a path to a verdict the ladder would
-not otherwise have reached.
+One fold is not allowed to reach ANCHOR_EXACT or ANCHOR_RELAXED, and it is
+worth saying why the exception exists at all. The normaliser applies NFKC,
+which is what makes a formula quotable, and NFKC discards position: it folds
+"10\u2076" to "106" and "10\u207b\u00b3" to "10-3". A quote and a document that
+agree only after that fold are not the same string, they are different numbers,
+and an identity verdict over them would be exactly the false attribution this
+ladder exists to refuse. So the superscript, subscript and fraction characters
+of the quote are compared against those of the located document span before
+either identity tier may be returned, and a span that only matched because of
+the fold comes back as ANCHOR_LOCATED with a character diff over the RAW forms.
+That check can only ever demote, never promote, so it cannot open a path to a
+verdict the ladder would not otherwise have reached.
 
-T4 is named NOT_LOCATABLE, not MISS, deliberately. It is a third outcome,
-distinct from both success and invalidation, following the `char_interval = None`
-semantics of Google LangExtract. A paper with no text layer (an image-only scan)
-lands in T4 for every quote and must never be read as "the quote failed".
+The fourth tier is named ANCHOR_NOT_LOCATABLE, not MISS, deliberately. It is a
+third outcome, distinct from both success and invalidation, following the
+`char_interval = None` semantics of Google LangExtract. A paper with no text
+layer (an image-only scan) lands in ANCHOR_NOT_LOCATABLE for every quote and
+must never be read as "the quote failed".
 
 Offsets
 -------
@@ -126,7 +128,13 @@ __all__ = [
 #: code would no longer give, so it reads STALE and re-anchors from its raw
 #: quote, which is what the version contract is for. STALE never means the
 #: citation was wrong.
-VERIFIER_VERSION = "verify/1.1.0"
+#:
+#: Bumped from 1.1.0 when the tiers were renamed from T1_EXACT, T2_RELAXED,
+#: T3_LOCATED and T4_NOT_LOCATABLE to ANCHOR_EXACT, ANCHOR_RELAXED,
+#: ANCHOR_LOCATED and ANCHOR_NOT_LOCATABLE. Every record stored under 1.1.0
+#: names a tier by a name this code no longer gives, so it reads STALE and
+#: re-anchoring rewrites `refs.tier` under the new name. No verdict moved.
+VERIFIER_VERSION = "verify/1.2.0"
 
 #: A digest of THIS module's behaviour, stored alongside VERIFIER_VERSION on
 #: every anchor record. Same backstop, same argument, same failure mode as
@@ -170,7 +178,8 @@ W3C_ANNOTATION_CONTEXT = "http://www.w3.org/ns/anno.jsonld"
 _WORD = re.compile(r"[A-Za-z0-9]+")
 
 # Seed-and-extend tuning. These are search parameters, not verdict parameters:
-# widening them can only find a better window, never change T1 or T2.
+# widening them can only find a better window, never change ANCHOR_EXACT or
+# ANCHOR_RELAXED.
 _SEED_WORDS_FALLBACK = (4, 3, 2, 1)
 _MAX_SEEDS = 10
 _MAX_CANDIDATES = 300
@@ -199,15 +208,15 @@ class Tier(enum.Enum):
     Deliberately not a boolean. See `locate`.
     """
 
-    T1_EXACT = "T1_EXACT"
-    T2_RELAXED = "T2_RELAXED"
-    T3_LOCATED = "T3_LOCATED"
-    T4_NOT_LOCATABLE = "T4_NOT_LOCATABLE"
+    ANCHOR_EXACT = "ANCHOR_EXACT"
+    ANCHOR_RELAXED = "ANCHOR_RELAXED"
+    ANCHOR_LOCATED = "ANCHOR_LOCATED"
+    ANCHOR_NOT_LOCATABLE = "ANCHOR_NOT_LOCATABLE"
 
     @property
     def is_verbatim(self) -> bool:
         """True only for the two character-identity tiers."""
-        return self in (Tier.T1_EXACT, Tier.T2_RELAXED)
+        return self in (Tier.ANCHOR_EXACT, Tier.ANCHOR_RELAXED)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -217,12 +226,14 @@ class Anchor:
     tier         which rung was reached.
     offset_norm  start of the located span in the normalised haystack, or None.
     length_norm  length of that span in the normalised haystack, or None. For
-                 T2 this is the length of the DOCUMENT span, which can differ
-                 from the length of the quote, because the match form deletes
-                 intra-word hyphens on both sides.
-    score        1.0 for T1 and T2 (identity), the window score for T3, and the
-                 best score seen for T4 so a caller can report how close it got.
-    diff         a character diff of quote against document. T3 only.
+                 ANCHOR_RELAXED this is the length of the DOCUMENT span,
+                 which can differ from the length of the quote, because the
+                 match form deletes intra-word hyphens on both sides.
+    score        1.0 for ANCHOR_EXACT and ANCHOR_RELAXED (identity), the
+                 window score for ANCHOR_LOCATED, and the best score seen for
+                 ANCHOR_NOT_LOCATABLE so a caller can report how close it got.
+    diff         a character diff of quote against document. ANCHOR_LOCATED
+                 only.
     scorer       the name of the scorer that produced `score`. Stored because
                  difflib and rapidfuzz scales are not interchangeable.
     """
@@ -236,7 +247,8 @@ class Anchor:
 
     @property
     def is_verbatim(self) -> bool:
-        """True only for T1 and T2. Never infer this from `score`."""
+        """True only for ANCHOR_EXACT and ANCHOR_RELAXED. Never infer it from
+        `score`."""
         return self.tier.is_verbatim
 
 
@@ -324,8 +336,8 @@ def _match_index_map(norm: str, match: str) -> list[int]:
     each other over 526k offsets across six extracted papers (from the same
     private corpus as every other measurement here) and agreed on every one,
     and `_match_span` verifies the recovered span against the document before
-    any T2 verdict is returned, so a drift would fail closed rather than
-    mislocate.
+    any ANCHOR_RELAXED verdict is returned, so a drift would fail closed rather
+    than mislocate.
     """
     index_map: list[int] = [-1] * len(match)
     i = 0
@@ -343,7 +355,8 @@ def _match_index_map(norm: str, match: str) -> list[int]:
     if j < m:
         # Alignment ran out, so match_form did something beyond delete and
         # casefold. Report no map rather than a wrong one: a wrong offset on a
-        # T2 verdict is worse than no T2 verdict at all.
+        # ANCHOR_RELAXED verdict is worse than no ANCHOR_RELAXED verdict at
+        # all.
         return []
     return index_map
 
@@ -375,22 +388,24 @@ def _match_span(
             if 0 <= a < b <= len(prepared.norm):
                 if match_form(prepared.norm[a:b]) == quote_match:
                     return a, b, at
-    # Fail closed. A T2 verdict asserts "verbatim", so it may not be returned
-    # with an offset that has not been verified against the document text. The
-    # lookup falls through to T3, which reports a score and a diff.
+    # Fail closed. An ANCHOR_RELAXED verdict asserts "verbatim", so it may not
+    # be returned with an offset that has not been verified against the
+    # document text. The lookup falls through to ANCHOR_LOCATED, which reports
+    # a score and a diff.
     return None
 
 
 def _casefold_hazard_next_to_digit(quote_norm: str, doc_span: str) -> bool:
     """A case difference on a letter touching a digit changes a unit prefix.
 
-    T2 forgives a case change, because the extractor sometimes recases a
-    heading or a sentence start, and case there is presentation. But a letter
-    directly beside a digit is a unit prefix, where case is meaning: 10 mW is a
-    billionth of 10 MW, 500 Mb is an eighth of 500 MB. When the quote and the
-    document span are equal only under casefold and differ at such a position,
-    a T2 identity verdict would assert two different quantities are the same
-    characters, which is the false verbatim this ladder exists to refuse.
+    ANCHOR_RELAXED forgives a case change, because the extractor sometimes
+    recases a heading or a sentence start, and case there is presentation. But
+    a letter directly beside a digit is a unit prefix, where case is meaning:
+    10 mW is a billionth of 10 MW, 500 Mb is an eighth of 500 MB. When the
+    quote and the document span are equal only under casefold and differ at
+    such a position, an ANCHOR_RELAXED identity verdict would assert two
+    different quantities are the same characters, which is the false verbatim
+    this ladder exists to refuse.
 
     Scoped to the equal-length, pure-case case (no intra-word hyphen in play),
     which is where a unit prefix lives; a hyphen is never part of a unit.
@@ -503,7 +518,7 @@ def _lower_keep_length(text: str) -> str:
     the served window, the prefix and suffix, and the diff. A character whose
     lowercase is not exactly one character is left as it stands: an aligned
     offset matters more here than folding a dotted capital I, and case is only
-    a scoring convenience at T3, never an identity claim.
+    a scoring convenience at ANCHOR_LOCATED, never an identity claim.
     """
     return "".join(
         low if len(low := ch.lower()) == 1 else ch for ch in text
@@ -516,7 +531,8 @@ def _best_window(
     """Best-scoring window of `haystack` for `needle`.
 
     Returns (score, offset, window_text), or (0.0, -1, "") if no candidate.
-    Scoring is case-insensitive: character identity is what T1 and T2 are for.
+    Scoring is case-insensitive: character identity is what ANCHOR_EXACT and
+    ANCHOR_RELAXED are for.
 
     Two phases. Every candidate is scored once at zero padding, then only the
     few best are re-scored at wider paddings, which is where an insertion in
@@ -529,14 +545,15 @@ def _best_window(
     width = len(needle_lower)
     # Each candidate is scored with an O(width squared) comparison, so scoring
     # every seed against a long needle is a denial-of-service lever: a caller
-    # who sends a long string that reaches T3 pays width squared per window
-    # across up to _MAX_CANDIDATES windows. Cap the number of windows so the
-    # product width-squared-times-windows stays bounded. For an ordinary quote
-    # the cap is far above _MAX_CANDIDATES and nothing changes; it bites only on
-    # a needle long enough to be a resource hazard, where examining fewer
-    # windows costs only best-effort recall on a fuzzy relocation that already
-    # is not a verbatim verdict. The server enforces a length ceiling too; this
-    # is the second, scale-independent lever that holds even if that is raised.
+    # who sends a long string that reaches ANCHOR_LOCATED pays width squared
+    # per window across up to _MAX_CANDIDATES windows. Cap the number of
+    # windows so the product width-squared-times-windows stays bounded. For an
+    # ordinary quote the cap is far above _MAX_CANDIDATES and nothing changes;
+    # it bites only on a needle long enough to be a resource hazard, where
+    # examining fewer windows costs only best-effort recall on a fuzzy
+    # relocation that already is not a verbatim verdict. The server enforces a
+    # length ceiling too; this is the second, scale-independent lever that
+    # holds even if that is raised.
     candidate_cap = max(30, _WINDOW_SCORE_BUDGET // max(1, width * width))
     seeds = _seed_offsets(haystack_lower, needle_lower)[:candidate_cap]
     scored: list[tuple[float, int]] = []
@@ -666,11 +683,12 @@ def _identity_survives_the_fold(
 ) -> bool:
     """Does this span still equal the quote once the lossy fold is undone?
 
-    Called before T1 and before T2, which are the only two tiers that assert
-    character identity. It compares the superscript, subscript and fraction
-    characters of the quote against those of the document span. If they differ,
-    the two strings became equal only because NFKC threw away a position, so
-    they are not the same string and no tier that says so may be returned.
+    Called before ANCHOR_EXACT and before ANCHOR_RELAXED, which are the only
+    two tiers that assert character identity. It compares the superscript,
+    subscript and fraction characters of the quote against those of the
+    document span. If they differ, the two strings became equal only because
+    NFKC threw away a position, so they are not the same string and no tier
+    that says so may be returned.
 
     Attack this closes, run against the real ladder: a document reading
     "Throughput reached 10\u2076 operations per second" returned
@@ -696,16 +714,17 @@ def locate(
 ) -> Anchor:
     """Walk the ladder and return an Anchor. Never returns None.
 
-    A miss is not an error: it comes back as a T4_NOT_LOCATABLE Anchor, so a
-    caller has to look at the tier to find out what happened.
+    A miss is not an error: it comes back as an ANCHOR_NOT_LOCATABLE Anchor, so
+    a caller has to look at the tier to find out what happened.
 
     The return type is a Tier, NEVER a bool, and that is load bearing. A
-    boolean return is exactly how a T3_LOCATED gets silently mistaken for a
-    pass: the passage was found, so the call looks successful, while the quote
-    text actually differs from the document. Preventing that confusion is the
-    reason this whole system exists. Only `Tier.T1_EXACT` and `Tier.T2_RELAXED`
-    assert "verbatim" (see `Anchor.is_verbatim`); T3 asserts only "the passage
-    is here and your string differs, here is the diff".
+    boolean return is exactly how an ANCHOR_LOCATED gets silently mistaken for
+    a pass: the passage was found, so the call looks successful, while the
+    quote text actually differs from the document. Preventing that confusion is
+    the reason this whole system exists. Only `Tier.ANCHOR_EXACT` and
+    `Tier.ANCHOR_RELAXED` assert "verbatim" (see `Anchor.is_verbatim`);
+    ANCHOR_LOCATED asserts only "the passage is here and your string differs,
+    here is the diff".
 
     `haystack` may be a raw string or a `PreparedText` from `prepare()`, which
     is what to use when anchoring many quotes into one document.
@@ -718,25 +737,25 @@ def locate(
 
     quote_norm = normalise(quote)[0]
     if not quote_norm.strip() or not prepared.norm:
-        return Anchor(Tier.T4_NOT_LOCATABLE, None, None, None, None, scorer)
+        return Anchor(Tier.ANCHOR_NOT_LOCATABLE, None, None, None, None, scorer)
 
-    # T1: character identity in the normalised text. No threshold. Walk EVERY
-    # occurrence: a quote may appear once where the fold guard demotes it (a
-    # superscript source) and again where it holds (a plain-digit source), and
-    # the identity verdict the document genuinely supports must win over the
-    # first occurrence that happens not to.
+    # ANCHOR_EXACT: character identity in the normalised text. No threshold.
+    # Walk EVERY occurrence: a quote may appear once where the fold guard
+    # demotes it (a superscript source) and again where it holds (a plain-digit
+    # source), and the identity verdict the document genuinely supports must
+    # win over the first occurrence that happens not to.
     qlen = len(quote_norm)
     first_at = prepared.norm.find(quote_norm)
     at = first_at
     while at >= 0:
         if _identity_survives_the_fold(prepared, quote, at, qlen):
-            return Anchor(Tier.T1_EXACT, at, qlen, 1.0, None, scorer)
+            return Anchor(Tier.ANCHOR_EXACT, at, qlen, 1.0, None, scorer)
         at = prepared.norm.find(quote_norm, at + 1)
     if first_at >= 0:
         return _folded_apart(prepared, quote, first_at, qlen, score_fn, scorer)
 
-    # T2: character identity in the match form. Still no threshold. This
-    # survives damage the EXTRACTOR did (a compound hyphen eaten at a line
+    # ANCHOR_RELAXED: character identity in the match form. Still no threshold.
+    # This survives damage the EXTRACTOR did (a compound hyphen eaten at a line
     # break, a case change), not damage the quote did. Walk every match-form
     # occurrence too, for the same reason, and refuse a case difference that
     # lands on a unit prefix.
@@ -755,17 +774,17 @@ def locate(
             if _identity_survives_the_fold(
                 prepared, quote, start, end - start
             ) and not _casefold_hazard_next_to_digit(quote_norm, doc_span):
-                return Anchor(Tier.T2_RELAXED, start, end - start, 1.0, None, scorer)
+                return Anchor(Tier.ANCHOR_RELAXED, start, end - start, 1.0, None, scorer)
             search_from = match_at + 1
         if first_span is not None:
             start, end = first_span
             return _folded_apart(prepared, quote, start, end - start, score_fn, scorer)
 
-    # T3: fuzzy relocation. The verdict is not "verbatim".
+    # ANCHOR_LOCATED: fuzzy relocation. The verdict is not "verbatim".
     best_score, best_at, window = _best_window(prepared.norm, quote_norm, score_fn)
     if best_at >= 0 and best_score >= t_locate:
         return Anchor(
-            Tier.T3_LOCATED,
+            Tier.ANCHOR_LOCATED,
             best_at,
             len(window),
             best_score,
@@ -773,10 +792,10 @@ def locate(
             scorer,
         )
 
-    # T4: not locatable. A third outcome, neither success nor invalidation.
-    # The best score is reported so a caller can say how close it got, but no
-    # offset is ever handed back, because nothing was located.
-    return Anchor(Tier.T4_NOT_LOCATABLE, None, None, best_score, None, scorer)
+    # ANCHOR_NOT_LOCATABLE: not locatable. A third outcome, neither success nor
+    # invalidation. The best score is reported so a caller can say how close it
+    # got, but no offset is ever handed back, because nothing was located.
+    return Anchor(Tier.ANCHOR_NOT_LOCATABLE, None, None, best_score, None, scorer)
 
 
 def _folded_apart(
@@ -787,11 +806,12 @@ def _folded_apart(
     score_fn: Callable[[str, str], float],
     scorer: str,
 ) -> Anchor:
-    """The T3 verdict for a span that only matched because of a lossy fold.
+    """The ANCHOR_LOCATED verdict for a span matched only through a lossy fold.
 
-    T3 and not T4: the passage really is there, at this offset, and refusing to
-    say where it is would be less useful and no safer. T3 and not T1 or T2: the
-    quote is not what the document says at that offset, which is precisely what
+    ANCHOR_LOCATED and not ANCHOR_NOT_LOCATABLE: the passage really is there,
+    at this offset, and refusing to say where it is would be less useful and no
+    safer. ANCHOR_LOCATED and not ANCHOR_EXACT or ANCHOR_RELAXED: the quote is
+    not what the document says at that offset, which is precisely what
     PASSAGE_RELOCATED_QUOTE_DIFFERS means. The diff is taken over the RAW forms
     rather than the normalised ones, because in the normalised forms there is
     nothing left to see: the fold is the whole difference.
@@ -803,7 +823,7 @@ def _folded_apart(
     """
     raw_span = _raw_of(prepared, offset, length)
     return Anchor(
-        Tier.T3_LOCATED,
+        Tier.ANCHOR_LOCATED,
         offset,
         length,
         score_fn(quote.lower(), raw_span.lower()),
@@ -880,12 +900,13 @@ def anchor_record(
 
     # W3C TextQuoteSelector.exact is the text OF THE DOCUMENT at the selected
     # position, and prefix/suffix already come from the document around it. At
-    # T1 the located text and the normalised quote are the same string, but at
-    # T2 (a case or hyphen difference) and T3 (a fuzzy relocation) they differ,
-    # so writing the quote into `exact` produced a selector whose
-    # prefix+exact+suffix was NOT a substring of the document and could not be
-    # re-anchored by any standard client. The document's own characters go in
-    # `exact`; the caller's quote is kept, distinctly, under refs.quote_raw.
+    # ANCHOR_EXACT the located text and the normalised quote are the same
+    # string, but at ANCHOR_RELAXED (a case or hyphen difference) and
+    # ANCHOR_LOCATED (a fuzzy relocation) they differ, so writing the quote
+    # into `exact` produced a selector whose prefix+exact+suffix was NOT a
+    # substring of the document and could not be re-anchored by any standard
+    # client. The document's own characters go in `exact`; the caller's quote
+    # is kept, distinctly, under refs.quote_raw.
     quote_selector: dict[str, Any] = {
         "type": "TextQuoteSelector",
         "exact": located_text if located_text is not None else quote_norm,

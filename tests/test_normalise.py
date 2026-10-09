@@ -36,13 +36,13 @@ from science2code.normalise import (  # noqa: E402
     INVISIBLE,
     MATCHFORM_VERSION,
     NORMALISER_FINGERPRINT,
+    NORMALISER_STAGE_DEHYPHENATE,
+    NORMALISER_STAGE_INVISIBLE,
+    NORMALISER_STAGE_NFKC,
+    NORMALISER_STAGE_PUNCTUATION,
+    NORMALISER_STAGE_WHITESPACE,
     NORMALISER_VERSION,
     PUNCT_FOLD,
-    S0_INVISIBLE,
-    S1_NFKC,
-    S2_PUNCTUATION,
-    S3_DEHYPHENATE,
-    S4_WHITESPACE,
     fingerprint_source,
     match_fold,
     match_form,
@@ -61,7 +61,7 @@ GREEK_MU = "\u03bc"
 
 
 class TestS0InvisibleStrip(unittest.TestCase):
-    """S0 removes the format characters that NFKC leaves in place."""
+    """NORMALISER_STAGE_INVISIBLE removes the format characters NFKC keeps."""
 
     def test_zero_width_space_is_stripped(self):
         self.assertEqual(normalise_text("h" + ZWSP + "tt" + ZWSP + "ps"), "https")
@@ -85,20 +85,22 @@ class TestS0InvisibleStrip(unittest.TestCase):
 
     def test_url_interleaved_with_zero_width_spaces_is_recovered(self):
         # The worst shape seen in the corpus: one zero width space between
-        # every character of a URL. This is why S0 is not optional.
+        # every character of a URL. This is why NORMALISER_STAGE_INVISIBLE is
+        # not optional.
         raw = ZWSP.join("https://example.org/a")
         self.assertEqual(normalise_text(raw), "https://example.org/a")
 
     def test_nfkc_alone_does_not_remove_a_zero_width_space(self):
-        # The reason S0 exists at all. If NFKC removed these, S0 would be dead
-        # code; it does not, because U+200B has no compatibility decomposition.
+        # The reason NORMALISER_STAGE_INVISIBLE exists at all. If NFKC removed
+        # these, NORMALISER_STAGE_INVISIBLE would be dead code; it does not,
+        # because U+200B has no compatibility decomposition.
         self.assertIn(ZWSP, unicodedata.normalize("NFKC", "a" + ZWSP + "b"))
 
-    def test_disabling_s0_keeps_the_zero_width_space(self):
-        without_s0 = [s for s in ALL_STAGES if s != S0_INVISIBLE]
-        self.assertIn(ZWSP, normalise_text("a" + ZWSP + "b", stages=without_s0))
+    def test_disabling_invisible_keeps_the_zero_width_space(self):
+        without_invisible = [s for s in ALL_STAGES if s != NORMALISER_STAGE_INVISIBLE]
+        self.assertIn(ZWSP, normalise_text("a" + ZWSP + "b", stages=without_invisible))
 
-    def test_s0_runs_before_composition(self):
+    def test_invisible_runs_before_composition(self):
         # An invisible sitting between a base letter and its combining mark
         # must not stop the two composing. Stripping first is what guarantees
         # it: cluster first and the mark would be orphaned.
@@ -107,7 +109,7 @@ class TestS0InvisibleStrip(unittest.TestCase):
 
 
 class TestS1Nfkc(unittest.TestCase):
-    """S1 is NFKC and not NFC, and it is applied cluster-wise."""
+    """NORMALISER_STAGE_NFKC is NFKC and not NFC, applied cluster-wise."""
 
     def test_mathematical_italic_x_folds_to_ascii_x(self):
         self.assertEqual(normalise_text(MATH_ITALIC_X + " = 1"), "x = 1")
@@ -142,17 +144,17 @@ class TestS1Nfkc(unittest.TestCase):
     def test_masculine_ordinal_is_lossy_and_that_is_documented(self):
         self.assertEqual(normalise_text("4\u00ba"), "4o")
 
-    def test_disabling_s1_leaves_the_math_alphanumeric_alone(self):
-        without_s1 = [s for s in ALL_STAGES if s != S1_NFKC]
-        self.assertEqual(normalise_text(MATH_ITALIC_X, stages=without_s1),
+    def test_disabling_nfkc_leaves_the_math_alphanumeric_alone(self):
+        without_nfkc = [s for s in ALL_STAGES if s != NORMALISER_STAGE_NFKC]
+        self.assertEqual(normalise_text(MATH_ITALIC_X, stages=without_nfkc),
                          MATH_ITALIC_X)
 
-    def test_disabling_s1_still_applies_canonical_composition(self):
+    def test_disabling_nfkc_still_applies_canonical_composition(self):
         # Documented semantics: the cluster pass falls back to NFC, so an
-        # ablation of S1 isolates the compatibility fold rather than removing
-        # normalisation altogether.
-        without_s1 = [s for s in ALL_STAGES if s != S1_NFKC]
-        self.assertEqual(normalise_text("Anto\u0301n", stages=without_s1),
+        # ablation of NORMALISER_STAGE_NFKC isolates the compatibility fold
+        # rather than removing normalisation altogether.
+        without_nfkc = [s for s in ALL_STAGES if s != NORMALISER_STAGE_NFKC]
+        self.assertEqual(normalise_text("Anto\u0301n", stages=without_nfkc),
                          "Ant\u00f3n")
 
 
@@ -189,10 +191,10 @@ class TestClusterwiseNfkcMatchesWholeString(unittest.TestCase):
     def test_clusterwise_equals_whole_string_nfkc(self):
         for text in self.FIXTURES:
             with self.subTest(text=ascii(text)):
-                self.assertEqual(normalise_text(text, stages=(S1_NFKC,)),
+                self.assertEqual(normalise_text(text, stages=(NORMALISER_STAGE_NFKC,)),
                                  unicodedata.normalize("NFKC", text))
 
-    def test_clusterwise_equals_whole_string_nfc_when_s1_is_off(self):
+    def test_clusterwise_equals_whole_string_nfc_when_nfkc_is_off(self):
         for text in self.FIXTURES:
             with self.subTest(text=ascii(text)):
                 self.assertEqual(normalise_text(text, stages=()),
@@ -219,13 +221,15 @@ class TestClusterwiseNfkcMatchesWholeString(unittest.TestCase):
             if unicodedata.combining(second) != 0:
                 continue  # a real combining mark, blocked by the mark test
             pair = parts[0] and chr(int(parts[0], 16)) + second
-            if normalise_text(pair, stages=(S1_NFKC,)) != unicodedata.normalize("NFKC", pair):
+            nfkc_only = normalise_text(pair, stages=(NORMALISER_STAGE_NFKC,))
+            if nfkc_only != unicodedata.normalize("NFKC", pair):
                 missed.append((hex(code), hex(ord(second))))
         self.assertEqual(missed, [])
 
 
 class TestS2PunctuationFold(unittest.TestCase):
-    """S2 folds typographic punctuation to the ASCII an agent would type."""
+    """NORMALISER_STAGE_PUNCTUATION folds typographic punctuation to the ASCII
+    an agent would type."""
 
     def test_curly_double_quotes(self):
         self.assertEqual(normalise_text("These \u201crules\u201d are"),
@@ -269,18 +273,20 @@ class TestS2PunctuationFold(unittest.TestCase):
                 self.assertEqual(normalise_text("a" + ch + "b"), "a b")
 
     def test_soft_hyphen_is_not_in_the_punctuation_table(self):
-        # S0 owns U+00AD. Folding it to a visible hyphen here would make an
-        # ablation of S0 measure two things at once.
+        # NORMALISER_STAGE_INVISIBLE owns U+00AD. Folding it to a visible
+        # hyphen here would make an ablation of NORMALISER_STAGE_INVISIBLE
+        # measure two things at once.
         self.assertNotIn(SOFT_HYPHEN, PUNCT_FOLD)
 
-    def test_disabling_s2_keeps_the_curly_quote(self):
-        without_s2 = [s for s in ALL_STAGES if s != S2_PUNCTUATION]
-        self.assertEqual(normalise_text("\u201ca\u201d", stages=without_s2),
+    def test_disabling_punctuation_keeps_the_curly_quote(self):
+        without_punctuation = [s for s in ALL_STAGES if s != NORMALISER_STAGE_PUNCTUATION]
+        self.assertEqual(normalise_text("\u201ca\u201d", stages=without_punctuation),
                          "\u201ca\u201d")
 
 
 class TestS3Dehyphenate(unittest.TestCase):
-    """S3 rejoins a word broken across a single line break."""
+    """NORMALISER_STAGE_DEHYPHENATE rejoins a word broken across one line
+    break."""
 
     def test_soft_break_is_joined(self):
         self.assertEqual(normalise_text("require-\nments"), "requirements")
@@ -292,8 +298,9 @@ class TestS3Dehyphenate(unittest.TestCase):
         self.assertEqual(normalise_text("require-\r\nments"), "requirements")
 
     def test_a_real_compound_is_joined_too_and_that_is_the_known_loss(self):
-        # S3 cannot tell a soft break from a compound. It joins both; the T2
-        # match form is what recovers the compound.
+        # NORMALISER_STAGE_DEHYPHENATE cannot tell a soft break from a
+        # compound. It joins both; the relaxed match form (ANCHOR_RELAXED) is
+        # what recovers the compound.
         self.assertEqual(normalise_text("well-\nknown"), "wellknown")
 
     def test_hyphen_before_a_capital_is_kept(self):
@@ -322,22 +329,24 @@ class TestS3Dehyphenate(unittest.TestCase):
     def test_two_joins_in_a_row(self):
         self.assertEqual(normalise_text("re-\nquire-\nments"), "requirements")
 
-    def test_disabling_s3_keeps_the_hyphen(self):
-        without_s3 = [s for s in ALL_STAGES if s != S3_DEHYPHENATE]
-        self.assertEqual(normalise_text("require-\nments", stages=without_s3),
+    def test_disabling_dehyphenate_keeps_the_hyphen(self):
+        without_dehyphenate = [s for s in ALL_STAGES if s != NORMALISER_STAGE_DEHYPHENATE]
+        self.assertEqual(normalise_text("require-\nments", stages=without_dehyphenate),
                          "require- ments")
 
 
 class TestS3KeepsADashThatIsNotAHyphen(unittest.TestCase):
     """A dash at a line break is punctuation, not a syllable break.
 
-    S2 folds every dash to the ASCII hyphen, after which S3 could no longer
-    tell one from the other and deleted both. An em dash at the end of a line
-    then fused the words either side of it: a document reading "achieve\u2014\\nin
-    which case" rendered as "achievein which case", a word that is in no paper,
-    and every quote spanning that point was unreachable at T1 and at T2,
-    because the characters the quote holds were not in the rendering at all.
-    Found on a real corpus: 29 such sites across 14 of 45 documents.
+    NORMALISER_STAGE_PUNCTUATION folds every dash to the ASCII hyphen, after
+    which NORMALISER_STAGE_DEHYPHENATE could no longer tell one from the other
+    and deleted both. An em dash at the end of a line then fused the words
+    either side of it: a document reading "achieve\u2014\\nin which case"
+    rendered as "achievein which case", a word that is in no paper, and every
+    quote spanning that point was unreachable at ANCHOR_EXACT and at
+    ANCHOR_RELAXED, because the characters the quote holds were not in the
+    rendering at all. Found on a real corpus: 29 such sites across 14 of 45
+    documents.
 
     The line break still goes, because the page shows no break there. The dash
     stays, because the page shows a dash.
@@ -382,7 +391,8 @@ class TestS3KeepsADashThatIsNotAHyphen(unittest.TestCase):
 
 
 class TestS4WhitespaceCollapse(unittest.TestCase):
-    """S4 collapses every whitespace run to one space and strips the ends."""
+    """NORMALISER_STAGE_WHITESPACE collapses every whitespace run to one space
+    and strips the ends."""
 
     def test_doubled_space_collapses(self):
         self.assertEqual(normalise_text("a  b"), "a b")
@@ -402,9 +412,9 @@ class TestS4WhitespaceCollapse(unittest.TestCase):
     def test_an_all_whitespace_string_becomes_empty(self):
         self.assertEqual(normalise_text("  \n\t\x0c "), "")
 
-    def test_disabling_s4_keeps_the_run(self):
-        without_s4 = [s for s in ALL_STAGES if s != S4_WHITESPACE]
-        self.assertEqual(normalise_text("a  b", stages=without_s4), "a  b")
+    def test_disabling_whitespace_keeps_the_run(self):
+        without_whitespace = [s for s in ALL_STAGES if s != NORMALISER_STAGE_WHITESPACE]
+        self.assertEqual(normalise_text("a  b", stages=without_whitespace), "a  b")
 
 
 class TestCaseIsPreserved(unittest.TestCase):
@@ -545,7 +555,8 @@ class TestIdempotence(unittest.TestCase):
 
 
 class TestMatchForm(unittest.TestCase):
-    """The T2 relaxed form: intra-word hyphens deleted, then casefolded."""
+    """The relaxed match form (ANCHOR_RELAXED): intra-word hyphens deleted,
+    then casefolded."""
 
     def test_it_recovers_a_compound_the_extractor_destroyed(self):
         # The measured case: pdftotext's own de-hyphenation dropped the hyphen
@@ -612,9 +623,10 @@ class TestMatchForm(unittest.TestCase):
         self.assertEqual(match_form("pages 2010- 2015"), "pages 2010- 2015")
 
     def test_the_fold_jumps_exactly_one_space_and_no_more(self):
-        # Asked of match_fold directly, because match_form normalises first
-        # and S4 has already collapsed every whitespace run to one space by
-        # the time the fold sees it. One space is that collapsed line break.
+        # Asked of match_fold directly, because match_form normalises first and
+        # NORMALISER_STAGE_WHITESPACE has already collapsed every whitespace
+        # run to one space by the time the fold sees it. One space is that
+        # collapsed line break.
         self.assertEqual(match_fold("action- able")[0], "actionable")
         self.assertEqual(match_fold("action-  able")[0], "action-  able")
 
@@ -634,7 +646,7 @@ class TestMatchForm(unittest.TestCase):
 
 
 class TestMatchFormWithMap(unittest.TestCase):
-    """The T2 form still has to be able to name a raw span."""
+    """The relaxed match form still has to be able to name a raw span."""
 
     def test_map_length_equals_output_length(self):
         for raw in TestIndexMapInvariants.CASES:
@@ -651,7 +663,7 @@ class TestMatchFormWithMap(unittest.TestCase):
                     all(index_map[i] <= index_map[i + 1]
                         for i in range(len(index_map) - 1)))
 
-    def test_a_t2_hit_maps_back_to_the_raw_offset(self):
+    def test_a_anchor_relaxed_hit_maps_back_to_the_raw_offset(self):
         raw = 'The \u201cLong-Term\u201d  system'
         text, index_map = match_form_with_map(raw)
         self.assertEqual(text, 'the "longterm" system')
@@ -732,7 +744,7 @@ class TestPurity(unittest.TestCase):
         raw = "\u201ca\u201d  b"
         expected = normalise(raw)
         normalise(raw, stages=())
-        normalise(raw, stages=(S0_INVISIBLE,))
+        normalise(raw, stages=(NORMALISER_STAGE_INVISIBLE,))
         self.assertEqual(normalise(raw), expected)
 
     def test_normalise_refuses_bytes(self):
@@ -752,16 +764,20 @@ class TestVersionContract(unittest.TestCase):
     """The version strings are stored in anchors, so their shape is a contract."""
 
     def test_normaliser_version_value(self):
-        # norm/1.1.0, not norm/1.0.0: S3 used to delete an em dash, en dash or
-        # minus sign that fell at a line break, fusing the two words either
-        # side of it. Fixing that moved offsets, and the documented rule is to
-        # bump the minor digit for a change to stage behaviour.
-        self.assertEqual(NORMALISER_VERSION, "norm/1.1.0")
+        # norm/1.1.0, not norm/1.0.0: NORMALISER_STAGE_DEHYPHENATE used to
+        # delete an em dash, en dash or minus sign that fell at a line break,
+        # fusing the two words either side of it. Fixing that moved offsets,
+        # and the documented rule is to bump the minor digit for a change to
+        # stage behaviour. norm/1.1.1: the stage constants S0_INVISIBLE and
+        # its siblings were renamed NORMALISER_STAGE_INVISIBLE and so on, which
+        # moves the fingerprint and no offset, so the patch digit.
+        self.assertEqual(NORMALISER_VERSION, "norm/1.1.1")
 
     def test_matchform_version_value(self):
-        # match/1.1.0, not match/1.0.0: the T2 fold now also deletes a hyphen
-        # that still has its line break beside it, "action- able", which is
-        # what a caller who ran their own extractor hands over.
+        # match/1.1.0, not match/1.0.0: the relaxed fold (ANCHOR_RELAXED) now
+        # also deletes a hyphen that still has its line break beside it,
+        # "action- able", which is what a caller who ran their own extractor
+        # hands over.
         self.assertEqual(MATCHFORM_VERSION, "match/1.1.0")
 
     def test_versions_are_strings_with_a_namespace_and_three_digits(self):
@@ -853,9 +869,10 @@ class TestNormaliserFingerprint(unittest.TestCase):
         self.assertNotEqual(fingerprint_source(before), fingerprint_source(after))
 
     def test_a_changed_fold_table_entry_moves_the_fingerprint(self):
-        # The concrete hazard: someone edits one line of the S2 table and does
-        # not touch NORMALISER_VERSION. Every stored offset is now wrong and
-        # the version string still says everything is fine.
+        # The concrete hazard: someone edits one line of the
+        # NORMALISER_STAGE_PUNCTUATION table and does not touch
+        # NORMALISER_VERSION. Every stored offset is now wrong and the version
+        # string still says everything is fine.
         module = import_module("science2code.normalise")
         with open(module.__file__, encoding="utf-8") as handle:
             source = handle.read()

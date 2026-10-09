@@ -59,6 +59,21 @@ what is planned.
   That census ran on a corpus that cannot be redistributed and left no script
   in this repository, so it cannot be reproduced from here and the figures are
   indicative rather than independently checkable.
+- The four tiers are named in full words: `T1_EXACT`, `T2_RELAXED`,
+  `T3_LOCATED` and `T4_NOT_LOCATABLE` are now `ANCHOR_EXACT`,
+  `ANCHOR_RELAXED`, `ANCHOR_LOCATED` and `ANCHOR_NOT_LOCATABLE`, both as
+  `Tier` members and as the `refs.tier` value an anchor record stores. The
+  normaliser's stage constants follow: `S0_INVISIBLE`, `S1_NFKC`,
+  `S2_PUNCTUATION`, `S3_DEHYPHENATE` and `S4_WHITESPACE` are now
+  `NORMALISER_STAGE_INVISIBLE`, `NORMALISER_STAGE_NFKC`,
+  `NORMALISER_STAGE_PUNCTUATION`, `NORMALISER_STAGE_DEHYPHENATE` and
+  `NORMALISER_STAGE_WHITESPACE`, with the same integer values. No verdict and
+  no offset moved, and the MCP tools' outcomes (`VERBATIM_EXACT` and the
+  others) are unchanged. A caller who stored records with `"T1_EXACT"` reads
+  them as STALE: `VERIFIER_VERSION` is `verify/1.2.0` and `NORMALISER_VERSION`
+  is `norm/1.1.1`, and `reanchor_record` rewrites each one under the new name.
+  Code that compares a stored tier string, or imports a stage constant by its
+  old name, has to be updated.
 
 ### Fixed
 
@@ -80,9 +95,9 @@ what is planned.
   repository: most affected quotes moved from the relaxed tier to exact
   identity, where the relaxed tier had been blaming the extractor for damage
   the normaliser did. `NORMALISER_VERSION` is `norm/1.1.0`.
-- The T2 relaxed form now also deletes a hyphen that still has its line break
-  beside it, "action- able", which is what a caller who ran their own
-  extractor or copied from a viewer hands over. Measured on sentences lifted
+- The relaxed match form (`ANCHOR_RELAXED`) now also deletes a hyphen that
+  still has its line break beside it, "action- able", which is what a caller
+  who ran their own extractor or copied from a viewer hands over. Measured on sentences lifted
   from an independent extraction of corpus PDFs, so that no quote was copied
   out of the text this server holds: character identity rose materially, with a
   small refusal rate and a remainder of genuine differences the independent

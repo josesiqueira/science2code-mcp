@@ -80,10 +80,10 @@ def norm(text):
 
 
 class LadderTierOneTests(unittest.TestCase):
-    def test_exact_hit_returns_t1_at_the_right_offset(self):
+    def test_exact_hit_returns_anchor_exact_at_the_right_offset(self):
         quote = "the cadence of recalibration matters more than the nominal"
         anchor = locate(PAPER_DOC, quote)
-        self.assertIs(anchor.tier, Tier.T1_EXACT)
+        self.assertIs(anchor.tier, Tier.ANCHOR_EXACT)
         self.assertEqual(anchor.score, 1.0)
         self.assertIsNone(anchor.diff)
         haystack = norm(PAPER_DOC)
@@ -93,34 +93,34 @@ class LadderTierOneTests(unittest.TestCase):
             norm(quote),
         )
 
-    def test_curly_apostrophe_quote_reaches_t1_after_normalisation(self):
+    def test_curly_apostrophe_quote_reaches_anchor_exact_after_normalisation(self):
         # The document has U+2019, the agent typed U+0027.
         self.assertIn("’", PAPER_DOC)
         quote = "a probe's reported value and the quantity it is meant to track"
         self.assertNotIn(quote, PAPER_DOC)
         anchor = locate(PAPER_DOC, quote)
-        self.assertIs(anchor.tier, Tier.T1_EXACT)
+        self.assertIs(anchor.tier, Tier.ANCHOR_EXACT)
         self.assertTrue(anchor.is_verbatim)
 
-    def test_curly_double_quotes_reach_t1_after_normalisation(self):
+    def test_curly_double_quotes_reach_anchor_exact_after_normalisation(self):
         doc = "She called it “deferred recalibration” in the report."
         anchor = locate(doc, 'called it "deferred recalibration" in the report')
-        self.assertIs(anchor.tier, Tier.T1_EXACT)
+        self.assertIs(anchor.tier, Tier.ANCHOR_EXACT)
 
-    def test_a_quote_carrying_a_citation_marker_still_reaches_t1(self):
+    def test_a_quote_carrying_a_citation_marker_still_reaches_anchor_exact(self):
         # An inline marker means the passage is an ATTRIBUTED claim rather than
         # an original one. That distinction is the caller's to draw; the ladder
         # only has to locate the characters, marker included.
         quote = "whenever recalibration is deferred [14]"
-        self.assertIs(locate(PAPER_DOC, quote).tier, Tier.T1_EXACT)
+        self.assertIs(locate(PAPER_DOC, quote).tier, Tier.ANCHOR_EXACT)
 
 
 class LadderTierTwoTests(unittest.TestCase):
-    def test_extractor_destroyed_compound_hyphen_reaches_t2(self):
+    def test_extractor_destroyed_compound_hyphen_reaches_anchor_relaxed(self):
         quote = "laboratories that report long-term calibration records"
         self.assertIn("longterm", EATEN_HYPHEN_DOC)
         anchor = locate(EATEN_HYPHEN_DOC, quote)
-        self.assertIs(anchor.tier, Tier.T2_RELAXED)
+        self.assertIs(anchor.tier, Tier.ANCHOR_RELAXED)
         self.assertTrue(anchor.is_verbatim)
         self.assertEqual(anchor.score, 1.0)
         haystack = norm(EATEN_HYPHEN_DOC)
@@ -130,23 +130,24 @@ class LadderTierTwoTests(unittest.TestCase):
         # the fold deletes the hyphen on the quote side only.
         self.assertEqual(anchor.length_norm, len(norm(quote)) - 1)
 
-    def test_case_only_difference_reaches_t2_not_t1(self):
+    def test_case_only_difference_reaches_anchor_relaxed_not_anchor_exact(self):
         quote = "THE PROTOCOL APPLIES TO LABORATORIES"
         anchor = locate(EATEN_HYPHEN_DOC, quote)
-        self.assertIs(anchor.tier, Tier.T2_RELAXED)
+        self.assertIs(anchor.tier, Tier.ANCHOR_RELAXED)
         haystack = norm(EATEN_HYPHEN_DOC)
         span = haystack[anchor.offset_norm : anchor.offset_norm + anchor.length_norm]
         self.assertEqual(span, "The protocol applies to laboratories")
 
-    def test_t2_span_is_correct_after_an_expanding_casefold(self):
+    def test_anchor_relaxed_span_is_correct_after_an_expanding_casefold(self):
         anchor = locate(EXPANDING_FOLD_DOC, "long-term reporting duties")
-        self.assertIs(anchor.tier, Tier.T2_RELAXED)
+        self.assertIs(anchor.tier, Tier.ANCHOR_RELAXED)
         haystack = norm(EXPANDING_FOLD_DOC)
         span = haystack[anchor.offset_norm : anchor.offset_norm + anchor.length_norm]
         self.assertEqual(span, "longterm reporting duties")
 
     def test_a_verbatim_tier_always_returns_a_verified_span(self):
-        """The invariant: T1 and T2 never hand back an unverified offset."""
+        """The invariant: ANCHOR_EXACT and ANCHOR_RELAXED never hand back an
+        unverified offset."""
         cases = [
             (PAPER_DOC, "the cadence of recalibration matters more than the nominal"),
             (PAPER_DOC, "a probe's reported value and the quantity"),
@@ -179,25 +180,25 @@ class LadderTierThreeTests(unittest.TestCase):
         "deferred"
     )
 
-    def test_dropped_word_reaches_t3_with_a_diff(self):
+    def test_dropped_word_reaches_anchor_located_with_a_diff(self):
         anchor = locate(PAPER_DOC, self.QUOTE_ONE_WORD_DROPPED)
-        self.assertIs(anchor.tier, Tier.T3_LOCATED)
+        self.assertIs(anchor.tier, Tier.ANCHOR_LOCATED)
         self.assertIsNotNone(anchor.offset_norm)
         self.assertIsNotNone(anchor.diff)
         self.assertIn("char diff", anchor.diff)
         self.assertIn("quantity", anchor.diff)
 
-    def test_t3_is_not_verbatim(self):
+    def test_anchor_located_is_not_verbatim(self):
         anchor = locate(PAPER_DOC, self.QUOTE_ONE_WORD_DROPPED)
         self.assertFalse(anchor.is_verbatim)
         self.assertFalse(anchor.tier.is_verbatim)
 
-    def test_t3_score_is_between_the_threshold_and_one(self):
+    def test_anchor_located_score_is_between_the_threshold_and_one(self):
         anchor = locate(PAPER_DOC, self.QUOTE_ONE_WORD_DROPPED)
         self.assertGreaterEqual(anchor.score, s2c_anchor.T_LOCATE_DEFAULT)
         self.assertLess(anchor.score, 1.0)
 
-    def test_t3_locates_the_right_passage(self):
+    def test_anchor_located_locates_the_right_passage(self):
         anchor = locate(PAPER_DOC, self.QUOTE_ONE_WORD_DROPPED)
         haystack = norm(PAPER_DOC)
         truth = haystack.find("the slow divergence between")
@@ -205,32 +206,32 @@ class LadderTierThreeTests(unittest.TestCase):
 
 
 class LadderTierFourTests(unittest.TestCase):
-    def test_fabricated_passage_from_unrelated_text_returns_t4(self):
+    def test_fabricated_passage_from_unrelated_text_returns_anchor_not_locatable(self):
         anchor = locate(PAPER_DOC, UNRELATED_QUOTE)
-        self.assertIs(anchor.tier, Tier.T4_NOT_LOCATABLE)
+        self.assertIs(anchor.tier, Tier.ANCHOR_NOT_LOCATABLE)
         self.assertFalse(anchor.is_verbatim)
 
-    def test_t4_never_carries_an_offset(self):
+    def test_anchor_not_locatable_never_carries_an_offset(self):
         anchor = locate(PAPER_DOC, UNRELATED_QUOTE)
         self.assertIsNone(anchor.offset_norm)
         self.assertIsNone(anchor.length_norm)
         self.assertIsNone(anchor.diff)
 
-    def test_t4_still_reports_how_close_it_got(self):
+    def test_anchor_not_locatable_still_reports_how_close_it_got(self):
         anchor = locate(PAPER_DOC, UNRELATED_QUOTE)
         self.assertIsNotNone(anchor.score)
         self.assertLess(anchor.score, s2c_anchor.T_LOCATE_DEFAULT)
 
-    def test_empty_quote_is_t4_and_not_an_exact_hit_at_zero(self):
+    def test_empty_quote_is_anchor_not_locatable_and_not_an_exact_hit_at_zero(self):
         anchor = locate(PAPER_DOC, "   ")
-        self.assertIs(anchor.tier, Tier.T4_NOT_LOCATABLE)
+        self.assertIs(anchor.tier, Tier.ANCHOR_NOT_LOCATABLE)
         self.assertIsNone(anchor.offset_norm)
 
-    def test_empty_haystack_is_t4_not_an_exception(self):
+    def test_empty_haystack_is_anchor_not_locatable_not_an_exception(self):
         # A source document with no text layer at all lands here for every
         # quote, and that is a boundary, not a failure.
         anchor = locate("", "the cadence of recalibration")
-        self.assertIs(anchor.tier, Tier.T4_NOT_LOCATABLE)
+        self.assertIs(anchor.tier, Tier.ANCHOR_NOT_LOCATABLE)
 
 
 class ParaphraseBoundaryTests(unittest.TestCase):
@@ -249,16 +250,17 @@ class ParaphraseBoundaryTests(unittest.TestCase):
         "recalibrate often rather than buying a more accurate probe",
     ]
 
-    def test_synonym_paraphrase_never_returns_t1_or_t2(self):
+    def test_synonym_paraphrase_never_returns_anchor_exact_or_anchor_relaxed(self):
         for text in self.PARAPHRASES:
             with self.subTest(paraphrase=text[:40]):
                 anchor = locate(PAPER_DOC, text)
-                self.assertNotIn(anchor.tier, (Tier.T1_EXACT, Tier.T2_RELAXED))
+                self.assertNotIn(anchor.tier, (Tier.ANCHOR_EXACT, Tier.ANCHOR_RELAXED))
                 self.assertFalse(anchor.is_verbatim)
 
     def test_paraphrase_stays_non_verbatim_at_every_threshold(self):
-        # T1 and T2 carry no threshold, so moving t_locate cannot promote a
-        # paraphrase to "verbatim". It can only move it between T3 and T4.
+        # ANCHOR_EXACT and ANCHOR_RELAXED carry no threshold, so moving
+        # t_locate cannot promote a paraphrase to "verbatim". It can only move
+        # it between ANCHOR_LOCATED and ANCHOR_NOT_LOCATABLE.
         for t_locate in (0.0, 0.5, 0.65, 0.9, 1.0):
             for text in self.PARAPHRASES:
                 with self.subTest(t=t_locate, paraphrase=text[:30]):
@@ -279,7 +281,7 @@ class ReturnTypeTests(unittest.TestCase):
         self.assertEqual(len(set(Tier)), 4)
         self.assertEqual(
             [t.value for t in Tier],
-            ["T1_EXACT", "T2_RELAXED", "T3_LOCATED", "T4_NOT_LOCATABLE"],
+            ["ANCHOR_EXACT", "ANCHOR_RELAXED", "ANCHOR_LOCATED", "ANCHOR_NOT_LOCATABLE"],
         )
 
     def test_locate_never_returns_none_on_a_miss(self):
@@ -291,15 +293,15 @@ class ReturnTypeTests(unittest.TestCase):
         # not exist, which is the opposite of what this asserts.
         anchor = locate(PAPER_DOC, "cadence of recalibration matters")
         with self.assertRaises(dataclasses.FrozenInstanceError):
-            anchor.tier = Tier.T4_NOT_LOCATABLE
+            anchor.tier = Tier.ANCHOR_NOT_LOCATABLE
 
 
 class ScorerTests(unittest.TestCase):
     def test_scorer_name_is_recorded_on_the_result(self):
         for quote in (
-            "cadence of recalibration matters",  # T1
+            "cadence of recalibration matters",  # ANCHOR_EXACT
             "a probe's reported low-drift value",  # hyphen fold path
-            UNRELATED_QUOTE,  # T4
+            UNRELATED_QUOTE,  # ANCHOR_NOT_LOCATABLE
         ):
             with self.subTest(quote=quote[:30]):
                 anchor = locate(PAPER_DOC, quote)
@@ -382,14 +384,14 @@ class AnchorRecordTests(unittest.TestCase):
         self.assertEqual(refs["matchform"], s2c_anchor.MATCHFORM_VERSION)
         self.assertEqual(refs["verifier"], s2c_anchor.VERIFIER_VERSION)
         self.assertEqual(refs["scorer"], "difflib")
-        self.assertEqual(refs["tier"], "T1_EXACT")
+        self.assertEqual(refs["tier"], "ANCHOR_EXACT")
         self.assertEqual(refs["quote_raw"], self.QUOTE)
 
     def test_not_locatable_record_has_no_position_selector(self):
         record = s2c_anchor.anchor_record(UNRELATED_QUOTE, PAPER_DOC)
         kinds = [s["type"] for s in record["target"]["selector"]]
         self.assertEqual(kinds, ["TextQuoteSelector"])
-        self.assertEqual(record["refs"]["tier"], "T4_NOT_LOCATABLE")
+        self.assertEqual(record["refs"]["tier"], "ANCHOR_NOT_LOCATABLE")
         self.assertFalse(record["refs"]["is_verbatim"])
 
     def test_fresh_record_is_fresh(self):
@@ -416,7 +418,7 @@ class AnchorRecordTests(unittest.TestCase):
 
         rebuilt = s2c_anchor.reanchor_record(record, PAPER_DOC)
         self.assertFalse(s2c_anchor.record_is_stale(rebuilt))
-        self.assertEqual(rebuilt["refs"]["tier"], "T1_EXACT")
+        self.assertEqual(rebuilt["refs"]["tier"], "ANCHOR_EXACT")
         self.assertEqual(rebuilt["target"]["selector"][1], good_position)
         self.assertEqual(rebuilt["target"]["source"], SOURCE_ID)
 
@@ -492,7 +494,7 @@ class RecordFingerprintTests(unittest.TestCase):
         self.assertFalse(s2c_anchor.record_is_stale(rebuilt))
         self.assertEqual(rebuilt["refs"]["normaliser_fingerprint"],
                          s2c_anchor.NORMALISER_FINGERPRINT)
-        self.assertEqual(rebuilt["refs"]["tier"], "T1_EXACT")
+        self.assertEqual(rebuilt["refs"]["tier"], "ANCHOR_EXACT")
 
     def test_a_fingerprint_mismatch_never_invalidates_the_quote(self):
         # STALE is a third state, never a verdict on the citation.
@@ -610,7 +612,7 @@ class PackageSurfaceTests(unittest.TestCase):
     def test_the_package_exposes_the_version_and_fingerprint(self):
         import science2code
 
-        self.assertEqual(science2code.NORMALISER_VERSION, "norm/1.1.0")
+        self.assertEqual(science2code.NORMALISER_VERSION, "norm/1.1.1")
         self.assertIsInstance(science2code.NORMALISER_FINGERPRINT, str)
         self.assertIsInstance(science2code.__version__, str)
 

@@ -9,17 +9,18 @@ came back, so a fix cannot silently regress.
 Findings, by the identifiers used in the review:
 
   F1  fraction expansion cut at a span boundary bypassed the fold guard and
-      returned T1_EXACT for a number the paper did not contain.
-  F2  a T2 casefold merged unit prefixes (10 mW matched 10 MW).
+      returned ANCHOR_EXACT for a number the paper did not contain.
+  F2  an ANCHOR_RELAXED casefold merged unit prefixes (10 mW matched 10 MW).
   F3  a guard demotion at the first occurrence denied a genuine verbatim that
       the document supported at a later occurrence.
-  F4  str.lower() length expansion skewed every T3 offset, window and diff.
+  F4  str.lower() length expansion skewed every ANCHOR_LOCATED offset, window
+      and diff.
   F5  a citation marker straddling the located-span boundary was counted in
       neither the located nor the surrounding bucket.
   F6  the sentence expansion overshot into the next sentence when the located
       span ended exactly at its terminator.
-  F7  the authoritative TextQuoteSelector was incoherent at T2/T3, so a
-      standard re-anchor by it failed.
+  F7  the authoritative TextQuoteSelector was incoherent at ANCHOR_RELAXED
+      and ANCHOR_LOCATED, so a standard re-anchor by it failed.
   H1  the toolchain header leaked into citation_markers.sentence.document_text.
   H2  a symlinked sidecar served files from outside the corpus.
   L1  a manifest path containing NUL or newline was accepted.
@@ -53,7 +54,7 @@ class F1FractionBoundary(unittest.TestCase):
         # "grew 2" plus the leading "1" of that expansion and claimed verbatim.
         a = locate("The dose grew 2½ times overall.", "grew 21")
         self.assertFalse(a.is_verbatim)
-        self.assertNotIn(a.tier, (Tier.T1_EXACT, Tier.T2_RELAXED))
+        self.assertNotIn(a.tier, (Tier.ANCHOR_EXACT, Tier.ANCHOR_RELAXED))
 
     def test_the_quarter_and_single_char_cases_are_not_verbatim(self):
         self.assertFalse(locate("with x¼ y", "x1").is_verbatim)
@@ -61,7 +62,7 @@ class F1FractionBoundary(unittest.TestCase):
 
     def test_the_full_fraction_still_locates_as_a_diff(self):
         a = locate("The dose grew 2½ times overall.", "grew 21/2")
-        self.assertEqual(a.tier, Tier.T3_LOCATED)
+        self.assertEqual(a.tier, Tier.ANCHOR_LOCATED)
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +96,7 @@ class F2UnitPrefixCasefold(unittest.TestCase):
 
     def test_a_plain_sentence_case_change_is_still_forgiven(self):
         # The guard must not over-demote. Presentation case away from a digit
-        # is exactly what T2 exists to forgive.
+        # is exactly what ANCHOR_RELAXED exists to forgive.
         self.assertTrue(
             locate("The result was clear here.", "the result was clear here").is_verbatim)
         self.assertTrue(locate("the study found X here", "The study found X here").is_verbatim)
@@ -114,14 +115,14 @@ class F3OccurrenceWalk(unittest.TestCase):
             "A later benchmark measured exactly 106 operations per second."
         )
         a = locate(doc, "106 operations per second")
-        self.assertEqual(a.tier, Tier.T1_EXACT)
+        self.assertEqual(a.tier, Tier.ANCHOR_EXACT)
         self.assertTrue(a.is_verbatim)
         # And the offset is the real one, the plain-digit occurrence.
         self.assertGreater(a.offset_norm, 40)
 
 
 # ---------------------------------------------------------------------------
-# F4: a length-changing lowercase must not skew the T3 offset
+# F4: a length-changing lowercase must not skew the ANCHOR_LOCATED offset
 # ---------------------------------------------------------------------------
 
 
@@ -133,7 +134,7 @@ class F4LowerLengthSkew(unittest.TestCase):
         passage = "the calibration protocol was applied to every field station"
         doc = prefix + " . " + passage + " and more text after it here."
         a = locate(doc, "calibration protocol was applied to every field station")
-        self.assertIn(a.tier, (Tier.T1_EXACT, Tier.T2_RELAXED, Tier.T3_LOCATED))
+        self.assertIn(a.tier, (Tier.ANCHOR_EXACT, Tier.ANCHOR_RELAXED, Tier.ANCHOR_LOCATED))
         served = doc[a.offset_norm:a.offset_norm + a.length_norm]
         # The served characters actually contain the passage words, not a
         # window shifted off the front of them.
@@ -166,15 +167,15 @@ class F6SentenceOvershoot(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# F7: the authoritative selector round-trips at T2
+# F7: the authoritative selector round-trips at ANCHOR_RELAXED
 # ---------------------------------------------------------------------------
 
 
 class F7SelectorCoherence(unittest.TestCase):
-    def test_prefix_exact_suffix_is_a_substring_of_the_document_at_t2(self):
+    def test_prefix_exact_suffix_is_a_substring_of_the_document_at_anchor_relaxed(self):
         doc = "many laboratories that report long-term calibration records agree"
         record = anchor_record("laboratories that report longterm calibration records", doc)
-        self.assertEqual(record["refs"]["tier"], Tier.T2_RELAXED.value)
+        self.assertEqual(record["refs"]["tier"], Tier.ANCHOR_RELAXED.value)
         sel = next(
             s for s in record["target"]["selector"] if s["type"] == "TextQuoteSelector"
         )
@@ -481,8 +482,9 @@ class AnchorNoFalsePositiveProperties(unittest.TestCase):
                 continue
             a = locate(doc, quote)
             # A genuine substring of the normalised document must reach an
-            # identity tier (T1 or T2), never a lower verdict, and the span it
-            # names must actually contain the quote's characters.
+            # identity tier (ANCHOR_EXACT or ANCHOR_RELAXED), never a lower
+            # verdict, and the span it names must actually contain the quote's
+            # characters.
             if a.is_verbatim:
                 served = norm[a.offset_norm:a.offset_norm + a.length_norm]
                 self.assertIn(quote.strip()[:8], served)

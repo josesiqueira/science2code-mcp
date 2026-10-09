@@ -107,7 +107,7 @@ NEAR_MISSES_OF_A = {
     "year_flipped": "The study was carried out by Hasan and colleagues in 2019",
 }
 
-IDENTITY_TIERS = (Tier.T1_EXACT, Tier.T2_RELAXED)
+IDENTITY_TIERS = (Tier.ANCHOR_EXACT, Tier.ANCHOR_RELAXED)
 IDENTITY_OUTCOMES = {o.value for o in env.VERBATIM_OUTCOMES}
 
 #: 0.00, 0.05, ... 1.00. The two identity tiers are threshold free, so no value
@@ -163,7 +163,7 @@ class TestParaphraseCannotReachCharacterIdentity(AdversarialTestCase):
         # A guard on the test above: a check that nothing can pass is worthless
         # if the thing that should pass does not.
         tiers = self.tiers_over_the_threshold_sweep(PAPER_A, TRUE_PASSAGE_OF_A)
-        self.assertEqual({Tier.T1_EXACT}, tiers)
+        self.assertEqual({Tier.ANCHOR_EXACT}, tiers)
 
     def test_a_paraphrase_comes_back_from_the_tool_as_a_refusal(self):
         for name, quote in PARAPHRASES_OF_A.items():
@@ -347,14 +347,15 @@ class TestFieldNameEvasion(AdversarialTestCase):
 class TestT2RelaxationIsCaseAndHyphenBlindByDesign(AdversarialTestCase):
     """Not a defect, and pinned here so that stays a decision rather than luck.
 
-    T2 folds case and deletes intra-word hyphens, so "resign" reaches it
-    against a document that says "re-sign", and "who" against one that says
-    "WHO". Those are real meaning changes and the ladder accepts them, on the
-    measured ground that the extractor eats a compound hyphen at a line break
-    far more often than a quote flips one. What makes it safe to accept is the
-    field the caller is handed back: `document_text` is the document's own
-    form, never the caller's, so the string available to paste is the paper's.
-    That is the load-bearing part, and it is what these tests pin.
+    ANCHOR_RELAXED folds case and deletes intra-word hyphens, so "resign"
+    reaches it against a document that says "re-sign", and "who" against one
+    that says "WHO". Those are real meaning changes and the ladder accepts
+    them, on the measured ground that the extractor eats a compound hyphen at a
+    line break far more often than a quote flips one. What makes it safe to
+    accept is the field the caller is handed back: `document_text` is the
+    document's own form, never the caller's, so the string available to paste
+    is the paper's. That is the load-bearing part, and it is what these tests
+    pin.
     """
 
     def test_a_deleted_hyphen_reaches_the_relaxed_tier(self):
@@ -492,7 +493,7 @@ class TestANfkcFoldCannotCreateCharacterIdentity(AdversarialTestCase):
         # cost a true match.
         quote = "Throughput reached 10" + SUPER_SIX + " operations per second"
         tiers = self.tiers_over_the_threshold_sweep(PAPER_A, quote)
-        self.assertEqual({Tier.T1_EXACT}, tiers)
+        self.assertEqual({Tier.ANCHOR_EXACT}, tiers)
         result = server.verify_quote(quote, paper_id="paper-a")
         self.assertEqual(Outcome.VERBATIM_EXACT.value, result["outcome"])
 
