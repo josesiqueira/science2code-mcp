@@ -6,27 +6,30 @@ verbatim, a wrong verdict, a wrong location, a text leak, or a containment gap.
 The whole point of this file is that the suite would now fail if any of them
 came back, so a fix cannot silently regress.
 
-Findings, by the identifiers used in the review:
+The defects, numbered in the order the review listed them:
 
-  F1  fraction expansion cut at a span boundary bypassed the fold guard and
-      returned ANCHOR_EXACT for a number the paper did not contain.
-  F2  an ANCHOR_RELAXED casefold merged unit prefixes (10 mW matched 10 MW).
-  F3  a guard demotion at the first occurrence denied a genuine verbatim that
-      the document supported at a later occurrence.
-  F4  str.lower() length expansion skewed every ANCHOR_LOCATED offset, window
-      and diff.
-  F5  a citation marker straddling the located-span boundary was counted in
-      neither the located nor the surrounding bucket.
-  F6  the sentence expansion overshot into the next sentence when the located
-      span ended exactly at its terminator.
-  F7  the authoritative TextQuoteSelector was incoherent at ANCHOR_RELAXED
-      and ANCHOR_LOCATED, so a standard re-anchor by it failed.
-  H1  the toolchain header leaked into citation_markers.sentence.document_text.
-  H2  a symlinked sidecar served files from outside the corpus.
-  L1  a manifest path containing NUL or newline was accepted.
-  M1  an unbounded input argument hung the single stateless server.
-  M2  a stale sidecar was served with an authoritative outcome and the
-      freshness note could not say which document was stale.
+  DEFECT1   fraction expansion cut at a span boundary bypassed the fold guard
+            and returned ANCHOR_EXACT for a number the paper did not contain.
+  DEFECT2   an ANCHOR_RELAXED casefold merged unit prefixes (10 mW matched
+            10 MW).
+  DEFECT3   a guard demotion at the first occurrence denied a genuine verbatim
+            that the document supported at a later occurrence.
+  DEFECT4   str.lower() length expansion skewed every ANCHOR_LOCATED offset,
+            window and diff.
+  DEFECT5   a citation marker straddling the located-span boundary was counted
+            in neither the located nor the surrounding bucket.
+  DEFECT6   the sentence expansion overshot into the next sentence when the
+            located span ended exactly at its terminator.
+  DEFECT7   the authoritative TextQuoteSelector was incoherent at
+            ANCHOR_RELAXED and ANCHOR_LOCATED, so a standard re-anchor by it
+            failed.
+  DEFECT8   the toolchain header leaked into
+            citation_markers.sentence.document_text.
+  DEFECT9   a symlinked sidecar served files from outside the corpus.
+  DEFECT10  a manifest path containing NUL or newline was accepted.
+  DEFECT11  an unbounded input argument hung the single stateless server.
+  DEFECT12  a stale sidecar was served with an authoritative outcome and the
+            freshness note could not say which document was stale.
 """
 
 from __future__ import annotations
@@ -44,11 +47,11 @@ from science2code.corpus import Corpus, ManifestError, _corpus_path
 from science2code.extract import build_document, sha256_file
 
 # ---------------------------------------------------------------------------
-# F1: no false verbatim from a fraction expansion cut at the span boundary
+# DEFECT1: no false verbatim from a fraction expansion cut at the span boundary
 # ---------------------------------------------------------------------------
 
 
-class F1FractionBoundary(unittest.TestCase):
+class Defect1FractionBoundary(unittest.TestCase):
     def test_a_quote_ending_inside_a_fraction_expansion_is_not_verbatim(self):
         # "2 and a half" NFKC-folds to "21/2". A quote of "grew 21" matched the
         # "grew 2" plus the leading "1" of that expansion and claimed verbatim.
@@ -66,11 +69,11 @@ class F1FractionBoundary(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# F2: a case difference on a unit prefix is not verbatim
+# DEFECT2: a case difference on a unit prefix is not verbatim
 # ---------------------------------------------------------------------------
 
 
-class F2UnitPrefixCasefold(unittest.TestCase):
+class Defect2UnitPrefixCasefold(unittest.TestCase):
     def test_milliwatt_is_not_the_same_verbatim_as_megawatt(self):
         a = locate("The transmitter draws 10 MW under load.", "draws 10 mW under load")
         self.assertFalse(a.is_verbatim)
@@ -104,11 +107,11 @@ class F2UnitPrefixCasefold(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# F3: a genuine verbatim at a later occurrence wins over a demoted first one
+# DEFECT3: a genuine verbatim at a later occurrence wins over a demoted first one
 # ---------------------------------------------------------------------------
 
 
-class F3OccurrenceWalk(unittest.TestCase):
+class Defect3OccurrenceWalk(unittest.TestCase):
     def test_a_later_exact_occurrence_is_returned_not_the_demoted_first(self):
         doc = (
             "Early estimates put throughput at 10⁶ operations per second. "
@@ -122,11 +125,11 @@ class F3OccurrenceWalk(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# F4: a length-changing lowercase must not skew the ANCHOR_LOCATED offset
+# DEFECT4: a length-changing lowercase must not skew the ANCHOR_LOCATED offset
 # ---------------------------------------------------------------------------
 
 
-class F4LowerLengthSkew(unittest.TestCase):
+class Defect4LowerLengthSkew(unittest.TestCase):
     def test_dotted_capital_i_does_not_skew_the_located_offset(self):
         # Twenty U+0130 before the passage. str.lower() expands each to two
         # characters, so the reported offset used to be twenty past the truth.
@@ -142,11 +145,11 @@ class F4LowerLengthSkew(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# F5, F6: marker classification and sentence boundaries
+# DEFECT5, DEFECT6: marker classification and sentence boundaries
 # ---------------------------------------------------------------------------
 
 
-class F5MarkerStraddle(unittest.TestCase):
+class Defect5MarkerStraddle(unittest.TestCase):
     def test_a_marker_on_the_located_boundary_is_counted_once(self):
         norm = "Oranges are good for you [12] said the review of diets."
         # Located span ends one character into "[12]".
@@ -157,7 +160,7 @@ class F5MarkerStraddle(unittest.TestCase):
         self.assertEqual(total, 1, "a straddling marker must land in exactly one bucket")
 
 
-class F6SentenceOvershoot(unittest.TestCase):
+class Defect6SentenceOvershoot(unittest.TestCase):
     def test_the_sentence_stops_at_its_own_terminator(self):
         text = "Oranges are good [12]. Pears are attributed to nobody at all."
         end = text.index(".") + 1  # located span ends just past the full stop
@@ -167,11 +170,11 @@ class F6SentenceOvershoot(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# F7: the authoritative selector round-trips at ANCHOR_RELAXED
+# DEFECT7: the authoritative selector round-trips at ANCHOR_RELAXED
 # ---------------------------------------------------------------------------
 
 
-class F7SelectorCoherence(unittest.TestCase):
+class Defect7SelectorCoherence(unittest.TestCase):
     def test_prefix_exact_suffix_is_a_substring_of_the_document_at_anchor_relaxed(self):
         doc = "many laboratories that report long-term calibration records agree"
         record = anchor_record("laboratories that report longterm calibration records", doc)
@@ -186,11 +189,11 @@ class F7SelectorCoherence(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# H2, L1: manifest path containment
+# DEFECT9, DEFECT10: manifest path containment
 # ---------------------------------------------------------------------------
 
 
-class H2L1PathContainment(unittest.TestCase):
+class Defect9And10PathContainment(unittest.TestCase):
     def test_a_served_path_symlink_that_escapes_the_root_is_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
@@ -283,7 +286,7 @@ class H2L1PathContainment(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# server-level guards: H1, M1, M2, using a corpus on disk
+# server-level guards: DEFECT8, DEFECT11, DEFECT12, using a corpus on disk
 # ---------------------------------------------------------------------------
 
 
@@ -328,7 +331,7 @@ class ServerGuards(unittest.TestCase):
 
         self.addCleanup(_restore)
 
-    def test_h1_header_text_never_appears_in_the_response(self):
+    def test_defect8_header_text_never_appears_in_the_response(self):
         body = ("Large language models can hallucinate citations in generated "
                 "text according to recent work.")
         _build_corpus(self.root, "REF-1", body)
@@ -340,7 +343,7 @@ class ServerGuards(unittest.TestCase):
         sentence = (r.get("citation_markers") or {}).get("sentence") or {}
         self.assertNotIn("form feed", sentence.get("document_text", ""))
 
-    def test_m1_a_huge_argument_is_refused_fast(self):
+    def test_defect11_a_huge_argument_is_refused_fast(self):
         _build_corpus(self.root, "REF-1", "a normal body sentence that is long enough to locate.")
         import time
         t0 = time.time()
@@ -349,7 +352,7 @@ class ServerGuards(unittest.TestCase):
         self.assertEqual(r["outcome"], "NOT_LOCATABLE")
         self.assertLessEqual(len(r.get("your_text", "")), server.MAX_LOCATABLE_CHARS)
 
-    def test_m1_a_sub_ceiling_pathological_quote_does_not_hang(self):
+    def test_defect11_a_sub_ceiling_pathological_quote_does_not_hang(self):
         # A re-attack showed a 9999-char quote against a large document ran for
         # over a minute, because the ceiling bounded needle length but not the
         # per-needle window count or the seed-gram count. Both are bounded now.
@@ -364,7 +367,7 @@ class ServerGuards(unittest.TestCase):
         self.assertEqual(r["outcome"], "NOT_LOCATABLE")
         self.assertLess(elapsed, 10.0, "a sub-ceiling quote must not run away")
 
-    def test_m1_the_anchor_ladder_bounds_a_long_needle_directly(self):
+    def test_defect11_the_anchor_ladder_bounds_a_long_needle_directly(self):
         # Defence in depth below the server ceiling: locate() itself must not
         # run away on a long needle, so the bound holds even if the ceiling is
         # raised or the library is used without the server.
@@ -376,7 +379,7 @@ class ServerGuards(unittest.TestCase):
         locate(prepared, ("the of " * 1500)[:9999])
         self.assertLess(time.time() - t0, 10.0)
 
-    def test_m2_a_stale_document_is_named_in_the_response(self):
+    def test_defect12_a_stale_document_is_named_in_the_response(self):
         body = "The mitochondria is the powerhouse of the cell and this is a long sentence indeed."
         _build_corpus(self.root, "REF-9", body, bad_pdf_hash=True)
         r = server.verify_quote(
@@ -386,7 +389,7 @@ class ServerGuards(unittest.TestCase):
         self.assertIn("REF-9", fields["document_freshness"].get("detail", ""))
         self.assertIn("REF-9", fields["corpus_freshness"].get("detail", ""))
 
-    def test_m2_an_unreadable_file_counts_as_stale_not_as_silence(self):
+    def test_defect12_an_unreadable_file_counts_as_stale_not_as_silence(self):
         # A re-attack showed that if hashing raised (an unreadable file), the
         # whole staleness check was swallowed and the served document got an
         # authoritative outcome with no freshness flag. Staleness must fail
